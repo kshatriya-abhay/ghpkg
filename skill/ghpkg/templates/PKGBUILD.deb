@@ -19,7 +19,7 @@ source=(@SOURCE@)
 sha256sums=('@SHA256@')
 
 package() {
-  bsdtar -xf "$srcdir"/data.tar.* -C "$pkgdir"
+  bsdtar -xf "$srcdir"/data.tar* -C "$pkgdir"
 
   # Layout fixes, each one agreed with the user. For example:
   #   rm -rf "$pkgdir/usr/share/doc"

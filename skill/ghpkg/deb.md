@@ -1,8 +1,8 @@
 # Packaging a .deb
 
-A `.deb` is an `ar` archive holding `control.tar.*` (metadata and maintainer
-scripts) and `data.tar.*` (the files). makepkg unpacks the `.deb` itself, so
-`data.tar.*` is already in `$srcdir` when `package()` runs. The work is in
+A `.deb` is an `ar` archive holding `control.tar*` (metadata and maintainer
+scripts) and `data.tar*` (the files). makepkg unpacks the `.deb` itself, so
+`data.tar*` is already in `$srcdir` when `package()` runs. The work is in
 three places: translating the dependencies, translating any maintainer
 scripts, and fixing the layout.
 

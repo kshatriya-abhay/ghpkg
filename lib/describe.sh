@@ -58,10 +58,10 @@ unpack_asset() {
     deb)
       bsdtar -xf "$file" -C "$work/meta" || die "$file isn't a readable .deb"
       mkdir -p "$work/meta/control"
-      for archive in "$work"/meta/control.tar.*; do
+      for archive in "$work"/meta/control.tar*; do
         bsdtar -xf "$archive" -C "$work/meta/control"
       done
-      for archive in "$work"/meta/data.tar.*; do
+      for archive in "$work"/meta/data.tar*; do
         bsdtar -xf "$archive" -C "$work/root"
         DATA_ARCHIVE=$archive
       done

@@ -146,6 +146,23 @@ CONTROL
   (cd "$dir" && bsdtar --format=ar -cf "$out" debian-binary control.tar.gz data.tar.gz)
 }
 
+# unslash_dirs tar: stores a tar's folders as "usr/bin" instead of "usr/bin/",
+# the way some .deb tools write them. bsdtar always adds the slash, so this
+# edits the headers: only for a ustar file whose entries are all empty, so
+# every 512-byte block is a header.
+unslash_dirs() {
+  local tar=$1 blocks i name sum
+  blocks=$(( $(stat -c %s "$tar") / 512 ))
+  for (( i = 0; i < blocks; i++ )); do
+    name=$(dd if="$tar" bs=512 skip="$i" count=1 2>/dev/null | head -c 100 | tr -d '\0')
+    [[ $name == */ ]] || continue
+    printf '\0' | dd of="$tar" bs=1 seek=$(( i * 512 + ${#name} - 1 )) conv=notrunc 2>/dev/null
+    # The header checksum is the sum of its bytes: the slash (47) is gone.
+    sum=$(dd if="$tar" bs=1 skip=$(( i * 512 + 148 )) count=6 2>/dev/null)
+    printf '%06o\0 ' $(( 8#$sum - 47 )) | dd of="$tar" bs=1 seek=$(( i * 512 + 148 )) conv=notrunc 2>/dev/null
+  done
+}
+
 # publish owner/repo tag file...: serves the files as the latest release's
 # assets, with GitHub listing each one's real checksum.
 publish() {

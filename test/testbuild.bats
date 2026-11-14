@@ -98,6 +98,30 @@ EOF
   [[ $output == *"only in the build:        /usr/bin/myapp"* ]]
 }
 
+@test "a .deb with an uncompressed data.tar, storing folders without a slash, lists only its files" {
+  local dir=$BATS_TEST_TMPDIR/slashless file=$BATS_TEST_TMPDIR/slashless.deb
+  mkdir -p "$dir/data/usr/bin" "$dir/data/usr/share/applications" "$dir/control"
+  : >"$dir/data/usr/bin/myapp"
+  : >"$dir/data/usr/share/applications/myapp.desktop"
+  (cd "$dir/data" && bsdtar --format=ustar -cf ../data.tar usr)
+  unslash_dirs "$dir/data.tar"
+  bsdtar -tf "$dir/data.tar" | grep -qx 'usr/bin'
+  printf 'Package: myapp\n' >"$dir/control/control"
+  (cd "$dir/control" && bsdtar -czf ../control.tar.gz .)
+  echo 2.0 >"$dir/debian-binary"
+  (cd "$dir" && bsdtar --format=ar -cf "$file" debian-binary control.tar.gz data.tar)
+
+  load_lib
+  run package_files "$file"
+  [[ $status -eq 0 ]]
+  [[ $output == $'usr/bin/myapp\nusr/share/applications/myapp.desktop' ]]
+
+  # describe reads the same uncompressed data.tar.
+  unpack_asset "$file" "$BATS_TEST_TMPDIR/unpacked" deb
+  [[ -f $BATS_TEST_TMPDIR/unpacked/root/usr/bin/myapp ]]
+  [[ -f $BATS_TEST_TMPDIR/unpacked/meta/control/control ]]
+}
+
 @test "a failed build shows the end of makepkg's log" {
   zst_pkgbuild
   sed -i "s/^sha256sums=.*/sha256sums=('0000')/" "$GHPKG_ROOT/myapp-gh/PKGBUILD"

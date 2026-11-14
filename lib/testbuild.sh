@@ -3,13 +3,15 @@
 # with the release file it came from.
 
 # The files in a package or .deb, one per line, without metadata or folders.
+# Folders are dropped by their type in the listing, not by a trailing slash:
+# some .deb tools store "usr/bin" rather than "usr/bin/".
 package_files() {
   case $1 in
-    *.pkg.tar.*)
-      bsdtar -tf "$1" | grep -vE '^\.(PKGINFO|BUILDINFO|MTREE|INSTALL)$' ;;
-    *.deb)
-      bsdtar -xOf "$1" 'data.tar.*' | bsdtar -tf - ;;
-  esac | sed 's#^\./##' | grep -vE '/$|^$' | sort
+    *.pkg.tar.*) bsdtar -tvf "$1" ;;
+    *.deb) bsdtar -xOf "$1" 'data.tar*' | bsdtar -tvf - ;;
+  esac | grep -v '^d' |
+    sed -E 's/^([^ ]+ +){8}//; s/ (->|link to) .*$//; s#^\./##' |
+    grep -vE '^\.(PKGINFO|BUILDINFO|MTREE|INSTALL)$|^\.?$' | sort
 }
 
 test_build() {
