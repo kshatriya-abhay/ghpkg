@@ -1,0 +1,14 @@
+# What upstream's package runs as root on install, upgrade and removal,
+# carried over after the user read it. Keep only the functions upstream has.
+
+post_install() {
+  :
+}
+
+post_upgrade() {
+  :
+}
+
+pre_remove() {
+  :
+}

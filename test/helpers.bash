@@ -16,6 +16,8 @@ setup_ghpkg() {
 
   export PATH=$REPO_DIR/test/stubs:$PATH
   unset GITHUB_TOKEN GHPKG_TEST_GH_TOKEN GHPKG_TEST_SUDO GHPKG_TEST_OFFLINE GHPKG_TEST_MAKEPKG_FAIL
+  # Tips go to stderr, which `run` mixes into $output. The tip tests turn them on.
+  export GHPKG_NO_TIPS=1
 }
 
 # Loads lib/ for tests that call one function directly.
@@ -73,3 +75,101 @@ EOF
 }
 
 installed() { echo "$1 $2" >>"$GHPKG_TEST_DB/installed"; }
+
+# --- Test packages ----------------------------------------------------------
+# Small but real release files, built with bsdtar. Their programs are copies of
+# /usr/bin/true: a real ELF file that links only to libc.
+
+# make_zst file name version [with-install]: a pacman package. With a fourth
+# argument it has an .INSTALL that calls a setup script inside the package.
+# FIXTURE_PROGRAM picks another ELF file to use as its program.
+make_zst() {
+  local out=$1 name=$2 version=$3 with_install=${4:-} dir members=(.PKGINFO usr)
+  dir=$BATS_TEST_TMPDIR/build-zst-$name
+  rm -rf "$dir"
+  mkdir -p "$dir/usr/bin" "$dir/usr/share/applications" "$dir/usr/share/icons/hicolor/256x256/apps"
+  cp "${FIXTURE_PROGRAM:-/usr/bin/true}" "$dir/usr/bin/$name"
+  printf '[Desktop Entry]\nName=%s\n' "$name" >"$dir/usr/share/applications/$name.desktop"
+  : >"$dir/usr/share/icons/hicolor/256x256/apps/$name.png"
+  cat >"$dir/.PKGINFO" <<PKGINFO
+pkgname = $name
+pkgver = $version-1
+pkgdesc = A test app
+url = https://example.org/$name
+license = MIT
+depend = glibc
+depend = gtk3
+optdepend = alsa-lib: sound
+provides = $name-core
+conflict = $name-legacy
+PKGINFO
+  if [[ -n $with_install ]]; then
+    mkdir -p "$dir/usr/share/$name"
+    printf '#!/bin/sh\necho "setting up"\n' >"$dir/usr/share/$name/setup.sh"
+    printf 'post_install() {\n  sh /usr/share/%s/setup.sh\n}\n' "$name" >"$dir/.INSTALL"
+    members=(.PKGINFO .INSTALL usr)
+  fi
+  (cd "$dir" && bsdtar --zstd -cf "$out" "${members[@]}")
+}
+
+# make_deb file name version: a .deb in Debian's layout, with the problems a
+# PKGBUILD has to deal with: a program in /opt only, a setuid file, Debian
+# docs, an unknown icon folder (next to a valid HiDPI one), a postinst script.
+make_deb() {
+  local out=$1 name=$2 version=$3 dir
+  dir=$BATS_TEST_TMPDIR/build-deb-$name
+  rm -rf "$dir"
+  mkdir -p "$dir/data/opt/App Name" "$dir/data/usr/share/doc/$name" \
+    "$dir/data/usr/share/icons/hicolor/256x256@2/apps" "$dir/data/usr/share/icons/hicolor/huge/apps" "$dir/control"
+  cp /usr/bin/true "$dir/data/opt/App Name/$name"
+  cp /usr/bin/true "$dir/data/opt/App Name/chrome-sandbox"
+  chmod 4755 "$dir/data/opt/App Name/chrome-sandbox"
+  echo changes >"$dir/data/usr/share/doc/$name/changelog.Debian"
+  : >"$dir/data/usr/share/icons/hicolor/256x256@2/apps/$name.png"
+  : >"$dir/data/usr/share/icons/hicolor/huge/apps/$name.png"
+  cat >"$dir/control/control" <<CONTROL
+Package: $name
+Version: $version
+Architecture: amd64
+Depends: libc6 (>= 2.31), libgtk-3-0 | libgtk-4-1,
+ libnss3
+Recommends: libasound2
+Homepage: https://example.org/$name
+Description: A test app
+ A longer description
+ over two lines.
+CONTROL
+  printf '#!/bin/sh\nupdate-desktop-database || true\n' >"$dir/control/postinst"
+  echo 2.0 >"$dir/debian-binary"
+  (cd "$dir/data" && bsdtar -czf ../data.tar.gz .)
+  (cd "$dir/control" && bsdtar -czf ../control.tar.gz .)
+  (cd "$dir" && bsdtar --format=ar -cf "$out" debian-binary control.tar.gz data.tar.gz)
+}
+
+# publish owner/repo tag file...: serves the files as the latest release's
+# assets, with GitHub listing each one's real checksum.
+publish() {
+  local repo=$1 tag=$2 file args=()
+  shift 2
+  for file; do
+    serve "https://github.com/$repo/releases/download/$tag/${file##*/}" <"$file"
+    args+=("${file##*/}" "$(sha256sum "$file" | cut -d' ' -f1)")
+  done
+  serve_release "$repo" "$tag" "${args[@]}"
+}
+
+# A hicolor index.theme that knows only a few folders, so icon checks don't
+# depend on the machine running the tests.
+fake_hicolor() {
+  export HICOLOR_INDEX=$BATS_TEST_TMPDIR/index.theme
+  printf '[Icon Theme]\nDirectories=256x256/apps,256x256@2/apps,scalable/apps\n' >"$HICOLOR_INDEX"
+}
+
+# Takes the fake makepkg off PATH, for tests that run the real one.
+use_real_makepkg() {
+  local dir=$BATS_TEST_TMPDIR/stubs-no-makepkg
+  mkdir -p "$dir"
+  cp "$REPO_DIR"/test/stubs/* "$dir/"
+  rm "$dir/makepkg"
+  export PATH=$dir:${PATH#"$REPO_DIR/test/stubs:"}
+}

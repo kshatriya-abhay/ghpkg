@@ -1,0 +1,28 @@
+# Unpacks the .deb that @PROJECT@ attaches to its GitHub releases.
+# Updated by `ghpkg update`.
+
+pkgname=@PKGNAME@
+_ghrepo=@GHREPO@
+pkgver=@PKGVER@
+pkgrel=1
+pkgdesc=@PKGDESC@
+arch=(x86_64)
+url="https://github.com/$_ghrepo"
+license=(@LICENSE@)
+depends=(@DEPENDS@)
+optdepends=(@OPTDEPENDS@)
+provides=(@PROVIDES@)
+conflicts=(@CONFLICTS@)
+install=@INSTALL@
+options=(!strip !debug)
+source=(@SOURCE@)
+sha256sums=('@SHA256@')
+
+package() {
+  bsdtar -xf "$srcdir"/data.tar.* -C "$pkgdir"
+
+  # Layout fixes, each one agreed with the user. For example:
+  #   rm -rf "$pkgdir/usr/share/doc"
+  #   mkdir -p "$pkgdir/usr/bin"
+  #   ln -s "/opt/App Name/app" "$pkgdir/usr/bin/app"
+}

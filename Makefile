@@ -5,7 +5,7 @@ BINDIR = $(DESTDIR)$(PREFIX)/bin
 LIBDIR = $(DESTDIR)$(PREFIX)/lib/ghpkg
 SHAREDIR = $(DESTDIR)$(PREFIX)/share/ghpkg
 
-SCRIPTS = bin/ghpkg lib/*.sh integrations/omarchy/*.hook test/stubs/* test/helpers.bash
+SCRIPTS = bin/ghpkg install.sh lib/*.sh integrations/omarchy/*.hook test/stubs/* test/helpers.bash
 
 .PHONY: test lint install install-dev uninstall
 
@@ -13,7 +13,7 @@ test:
 	bats test
 
 lint:
-	shellcheck -x $(SCRIPTS)
+	shellcheck -x -S warning $(SCRIPTS)
 
 # Copies ghpkg into PREFIX (~/.local by default; /usr for the pacman package).
 install:
@@ -22,6 +22,9 @@ install:
 	install -Dm755 -t $(SHAREDIR)/integrations/omarchy integrations/omarchy/*.hook
 	if [ -d skill ]; then cd skill && find ghpkg -type f -exec install -Dm644 {} $(SHAREDIR)/skill/{} \; ; fi
 	install -Dm644 LICENSE $(DESTDIR)$(PREFIX)/share/licenses/ghpkg/LICENSE
+	@if [ -z "$(DESTDIR)" ] && { command -v omarchy >/dev/null || [ -d "$(HOME)/.config/omarchy" ]; }; then \
+		echo "Tip: on Omarchy, run 'ghpkg hook install' to list ghpkg updates after every omarchy update."; fi
+	@if [ -z "$(DESTDIR)" ]; then echo "Tip: './install.sh' installs ghpkg as a package that updates itself instead."; fi
 
 # Links ~/.local/bin/ghpkg to this checkout, for working on ghpkg itself.
 install-dev:

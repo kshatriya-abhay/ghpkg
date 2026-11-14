@@ -36,6 +36,14 @@ Keeping packages updated:
   list                  List the packages, their versions and GitHub repos. Offline.
   remove <package>      Uninstall a package, and optionally delete its PKGBUILD.
 
+Adding a package:
+  inspect <owner/repo>  Show what a release offers, and which package names are free.
+  describe <owner/repo> <file>
+                        Download a release file and show what's inside it.
+  test-build <package>  Build a package without installing it, and compare it with upstream.
+  skill install|remove  Make the ghpkg skill available to coding agents, for .deb releases.
+
+
 Other:
   help [command]        Show help, for one command if given.
   --version             Show the version.
@@ -79,6 +87,41 @@ Uninstalls the package with pacman, then asks whether to delete its PKGBUILD
 folder too. Keeps the folder unless you say yes.
 EOF
       ;;
+    inspect) cat <<'EOF'
+Usage: ghpkg inspect <owner/repo or GitHub URL> [--json]
+
+Shows the latest release, its Linux x86_64 files ranked by how easy they are to
+package, whether the official repos have the app, which names are taken on the
+AUR, and whether you already have a PKGBUILD for it. Changes nothing.
+EOF
+      ;;
+    describe) cat <<'EOF'
+Usage: ghpkg describe <owner/repo or GitHub URL> <release file> [--json]
+
+Downloads a .pkg.tar.zst or .deb from the latest release into the cache,
+checks it against GitHub's checksum, and shows what's inside: metadata,
+dependencies, scripts that run as root, the files, the libraries the programs
+link to and which packages own them, and anything that needs a decision.
+Runs nothing from the package.
+EOF
+      ;;
+    test-build) cat <<'EOF'
+Usage: ghpkg test-build <package>
+
+Builds the package in the cache without installing it or checking its
+dependencies, then shows the result and compares its files with the release
+file it came from.
+EOF
+      ;;
+    skill) cat <<'EOF'
+Usage: ghpkg skill install | remove | path
+
+install  Links the ghpkg skill into ~/.claude/skills, ~/.codex/skills and
+         ~/.agents/skills, for the ones that exist.
+remove   Removes those links.
+path     Prints where the skill's files are.
+EOF
+      ;;
     *) usage ;;
   esac
 }
@@ -99,5 +142,9 @@ case $cmd in
   update) require_system curl jq vercmp makepkg updpkgsums; update "$@" ;;
   list) require_system; list ;;
   remove) require_system; remove "$@" ;;
+  inspect) require_system curl jq; inspect "$@" ;;
+  describe) require_system curl jq bsdtar readelf sha256sum; describe "$@" ;;
+  test-build) require_system makepkg fakeroot bsdtar; test_build "$@" ;;
+  skill) skill "$@" ;;
   *) warn "unknown command '$cmd'"; usage >&2; exit 1 ;;
 esac

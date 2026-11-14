@@ -1,4 +1,4 @@
-# shellcheck shell=bash
+# shellcheck shell=bash disable=SC2034 # plan sets globals that its callers read
 # Working out what a package needs.
 
 # Sets, for one package:

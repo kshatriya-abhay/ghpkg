@@ -3,7 +3,7 @@
 # writes, and logs each request (URL and headers) to $GHPKG_TEST_LOG/curl.
 set -euo pipefail
 
-url= out= write= fail=false headers=()
+url='' out='' write='' fail=false headers=()
 while (( $# )); do
   case $1 in
     -o) out=$2; shift ;;
@@ -37,4 +37,4 @@ if [[ -n $out ]]; then
 else
   cat "$body"
 fi
-[[ -z $write ]] || printf "${write//%\{http_code\}/$code}"
+[[ -z $write ]] || printf '%b' "${write//%\{http_code\}/$code}"

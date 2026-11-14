@@ -1,0 +1,26 @@
+# Repackages the Arch package that @PROJECT@ attaches to its GitHub releases.
+# Updated by `ghpkg update`.
+
+pkgname=@PKGNAME@
+_ghrepo=@GHREPO@
+pkgver=@PKGVER@
+pkgrel=1
+pkgdesc=@PKGDESC@
+arch=(x86_64)
+url="https://github.com/$_ghrepo"
+license=(@LICENSE@)
+depends=(@DEPENDS@)
+optdepends=(@OPTDEPENDS@)
+provides=(@PROVIDES@)
+conflicts=(@CONFLICTS@)
+install=@INSTALL@
+options=(!strip !debug)
+_file=@FILE@
+source=(@SOURCE@)
+noextract=("$_file")
+sha256sums=('@SHA256@')
+
+package() {
+  bsdtar -xf "$srcdir/$_file" -C "$pkgdir" \
+    --exclude .PKGINFO --exclude .BUILDINFO --exclude .MTREE --exclude .INSTALL
+}
