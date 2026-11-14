@@ -18,7 +18,7 @@ setup() {
   echo '{"results":[
     {"Name":"myapp","Description":"The same app","URL":"https://github.com/me/myapp"},
     {"Name":"myapp-bin","Description":"Another app entirely","URL":"https://example.com/other"}]}' |
-    serve https://aur.archlinux.org/rpc/v5/info
+    serve_aur "$(cat)" myapp other-name
 }
 
 # answers line... : runs `ghpkg add me/myapp` with those lines typed in.
@@ -61,6 +61,17 @@ pkgbuild() { cat "$GHPKG_ROOT/myapp-gh/PKGBUILD"; }
   [[ $output == *"myapp  [same GitHub repo] The same app"* ]]
   [[ $output == *"myapp-bin  Another app entirely"* ]]
   [[ $(grep '^conflicts=' "$GHPKG_ROOT/myapp-gh/PKGBUILD") != *myapp-bin* ]]
+}
+
+@test "upstream's name is left out of provides and conflicts when another app owns it" {
+  make_zst "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst" myapp 1.0
+  publish me/myapp v1.0 "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst"
+  serve_aur '{"results":[{"Name":"myapp","Description":"Another app","URL":"https://github.com/someone/else"}]}' myapp
+  # name, AUR conflicts, dependencies, optional dependencies, go on after the warning, save, install now
+  add_with "" y y y y "" n
+  [[ $output == *"These names belong to other apps: myapp (AUR"* ]]
+  [[ $(grep '^provides=' "$GHPKG_ROOT/myapp-gh/PKGBUILD") == "provides=('myapp-core')" ]]
+  [[ $(grep '^conflicts=' "$GHPKG_ROOT/myapp-gh/PKGBUILD") == "conflicts=('myapp-legacy')" ]]
 }
 
 @test "dependencies come from linked libraries too, and 'u' keeps upstream's only" {
@@ -107,7 +118,7 @@ pkgbuild() { cat "$GHPKG_ROOT/myapp-gh/PKGBUILD"; }
 
 @test "a name taken on the AUR is refused and asked again" {
   echo '{"results":[{"Name":"myapp-gh","Description":"Someone else","URL":null}]}' |
-    serve https://aur.archlinux.org/rpc/v5/info
+    serve_aur "$(cat)" myapp other-name
   make_zst "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst" myapp 1.0
   publish me/myapp v1.0 "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst"
   # first name (taken), second name, AUR conflicts: none, deps, optdeps, save, install now

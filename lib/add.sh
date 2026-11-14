@@ -203,6 +203,12 @@ add() {
   local aur
   # shellcheck disable=SC2086 # one name per word
   aur=$(aur_info_json $aur_candidates)
+  # describe searched the AUR by name for the same app (pot-translation for
+  # pot-app/pot-desktop, say); list those with the related names.
+  local matches
+  matches=$(jq -c '.aur_same_app // []' <<<"$desc")
+  [[ $aur == null ]] ||
+    aur=$(jq -c --argjson m "$matches" '. + ($m | map({Name, Description: "", URL})) | unique_by(.Name)' <<<"$aur")
   if [[ $aur == null ]]; then
     warn "couldn't reach the AUR, so there's no check for the same app under other names there"
   elif [[ $(jq length <<<"$aur") -gt 0 ]]; then
@@ -210,8 +216,6 @@ add() {
     echo "The AUR has packages with related names. List the ones that are this same app in"
     echo "conflicts=, so installing yours replaces them. Never an unrelated app that only shares"
     echo "a name: pacman would uninstall it."
-    local matches
-    matches=$(same_app_of "$repo" "$(jq -r '.metadata.url // empty' <<<"$desc")" <<<"$aur")
     jq -r --argjson m "$matches" '.[] | .Name as $n | ($m | map(select(.Name == $n))[0].matched) as $why
       | "  \(.Name)  \(if $why == "repo" then "[same GitHub repo] " elif $why == "website" then "[same website] " else "" end)\(.Description // "")"' <<<"$aur"
     same_app=$(jq -r '.[].Name' <<<"$matches")
@@ -256,7 +260,7 @@ add() {
   [[ -n $proposed ]] || echo "  (none)"
   if jq -e '.warnings[] | select(contains("basic C libraries"))' <<<"$desc" >/dev/null; then
     echo
-    echo "  Note: the programs link only to the basic C libraries, so they probably load"
+    echo "  Note: some programs link only to the basic C libraries, so they probably load"
     echo "  more at runtime (display, GL, sound, D-Bus) that no list here can show."
     echo "  Compare with the AUR's PKGBUILD or upstream's docs, and add them with 'e'."
   fi
@@ -309,10 +313,13 @@ add() {
   local base upstream_name provides conflicts tag_expr file_expr source_expr template pkgbuild pkgdesc licenses
   base=${name%-gh}
   upstream_name=$(jq -r '.metadata.name // empty' <<<"$desc")
+  # Names that belong to another app stay out of both: pacman would uninstall it.
+  local foreign
+  foreign=$(jq -r '.foreign_names[]?.name' <<<"$desc")
   provides=$({ echo "$base"; echo "$upstream_name"; jq -r '.metadata.provides[]' <<<"$desc" | bare_name; } |
-    grep -vxF "$name" | grep -v '^$' | awk '!seen[$0]++' || true)
+    grep -vxF "$name" | grep -v '^$' | grep -vxF -f <(echo "$foreign") | awk '!seen[$0]++' || true)
   conflicts=$({ echo "$upstream_name"; jq -r '.metadata.conflicts[]' <<<"$desc" | bare_name
-    echo "$same_app"; } | grep -vxF "$name" | grep -v '^$' | awk '!seen[$0]++' || true)
+    echo "$same_app"; } | grep -vxF "$name" | grep -v '^$' | grep -vxF -f <(echo "$foreign") | awk '!seen[$0]++' || true)
 
   tag_expr=${tag/"$version"/'$pkgver'}
   if [[ $file == *"$version"* ]]; then

@@ -51,7 +51,7 @@ Read the one that matches the release file, plus `dependencies.md`, before writi
 6. **Ask: scripts that run as root, and layout fixes.** Print every script in full in your reply, plus the scripts it calls (describe includes them), with a short plain summary of what each does. Ask whether to carry them over as they are, change them, or stop. Then list each layout fix you propose (see `deb.md`) and ask yes or no for each.
 7. **Write the PKGBUILD** from the template, and the install file if one was agreed. Print the complete file in your reply, then ask before saving it to `~/.config/pkgbuilds/<name>/`.
 8. **`ghpkg test-build <name>`.** It builds without installing, compares the files and their permissions with the release file, and checks that each download link in `source=` is a file of the latest release. Show the user the result. If files differ, explain each difference. If it says a source link isn't a file of the release, fix `source=` and run it again: a build that passed from the cache proves nothing about the link.
-9. **Hand over.** Tell the user to run `ghpkg update <name>` in their own terminal. It needs sudo, so it fails without a terminal.
+9. **Hand over.** Tell the user to run `ghpkg update <name>` in their own terminal. It needs sudo, so it fails without a terminal. Mention anything installing doesn't do by itself: a systemd service to enable (`sudo systemctl enable --now <unit>`), a device to replug after new udev rules, or an AUR-only dependency to install first.
 
 ## Where you must stop and ask
 
@@ -87,5 +87,6 @@ Use your question tool if you have one. Otherwise ask in plain text and wait for
 - If the file name has no version in it, give the download a versioned name: `app-$pkgver.deb::$url/releases/download/v$pkgver/app_amd64.deb`.
 - `sha256sums=(…)` stays on one line. `ghpkg update` rewrites it.
 - `provides=` lists the app's own names: upstream's package name, and what upstream's package provides.
+- **Never a name that belongs to another app,** in `provides=` or `conflicts=`: `describe` lists them under "These names belong to other apps" (`foreign_names` in `--json`). A generic upstream name such as `pot` can be an unrelated AUR package, and pacman would uninstall that app when installing yours.
 - `conflicts=` lists those plus the AUR packages that are this same app, exactly as `describe` reports them ("AUR packages of this same app", `aur_same_app` in `describe --json`). Never add AUR names you haven't seen there, and never an AUR package that only shares a name: pacman would uninstall that other app.
 - `options=(!strip !debug)`: the binaries are prebuilt; leave them as they are.

@@ -37,6 +37,10 @@ If the file name has no version in it, set `_file="<pkgname>-$pkgver.pkg.tar.zst
 
 Upstream file names sometimes include their own pkgrel, for example `app-1.2.0-1-x86_64.pkg.tar.zst`. Keep that `-1` as it is: it's part of the file name, not your `pkgrel`.
 
+## Files in /etc
+
+`describe` lists files outside `/usr`. A config file in `/etc` that the user may edit belongs in `backup=`, so an update keeps their copy and saves the new one as `.pacnew`. Propose it and ask, as a layout fix. Theme files and other assets the app only reads don't need it.
+
 ## Install scripts
 
 The repack leaves upstream's `.INSTALL` out (it's excluded in `package()`), so

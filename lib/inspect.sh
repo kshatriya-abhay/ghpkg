@@ -3,6 +3,7 @@
 # Only reads; changes nothing.
 
 AUR_RPC=${AUR_RPC:-https://aur.archlinux.org/rpc/v5/info}
+AUR_SEARCH=${AUR_SEARCH:-https://aur.archlinux.org/rpc/v5/search}
 
 # owner/repo, from "owner/repo" or any github.com URL into the repo.
 parse_repo() {
@@ -76,25 +77,63 @@ aur_info_json() {
   fi
 }
 
-# The AUR packages that are this same app: among the plain, -bin and -git forms
-# of the given names and of the repo's name, those whose homepage is
-# github.com/<repo>, or is upstream's own website when one is given. A JSON
-# array of {Name, URL, matched} (matched is "repo" or "website"), or null when
-# the AUR can't be reached. A package that only shares a name is never
-# included: listing it in conflicts= would make pacman uninstall another app.
+# AUR packages whose names contain any of the given names, as one JSON array
+# of {Name, Description, URL}, or null when the AUR can't be reached. Names
+# shorter than two letters are skipped: the AUR won't search for them.
+aur_search_json() {
+  local name result all='[]'
+  for name; do
+    (( ${#name} >= 2 )) || continue
+    result=$(curl -fsSL --connect-timeout 10 --max-time 30 --retry 2 -G --data-urlencode by=name \
+      "$AUR_SEARCH/$(jq -rn --arg n "$name" '$n | @uri')" 2>/dev/null) || { echo null; return; }
+    all=$(jq -c --argjson all "$all" '$all + [.results[] | {Name, Description, URL}] | unique_by(.Name)' <<<"$result")
+  done
+  echo "$all"
+}
+
+# The AUR packages that are this same app: those whose names contain one of
+# the given names or the repo's name, and whose homepage is github.com/<repo>,
+# or upstream's own website when one is given. The name search finds packages
+# such as pot-translation for pot-app/pot-desktop, which no -bin or -git form
+# of a name would. A JSON array of {Name, URL, matched} (matched is "repo" or
+# "website"), or null when the AUR can't be reached. A package that only
+# shares a name is never included: listing it in conflicts= would make pacman
+# uninstall another app.
 aur_same_app_json() {
-  local repo=$1 website=${2:-} name candidates aur
+  local repo=$1 website=${2:-} found names
   shift 2
-  candidates=$(for name in "$@" "$(tr '[:upper:]' '[:lower:]' <<<"${repo#*/}")"; do
-    [[ -n $name ]] && printf '%s\n' "$name" "$name-bin" "$name-git"
-  done | awk '!seen[$0]++')
-  # shellcheck disable=SC2086 # one name per word
-  aur=$(aur_info_json $candidates)
-  if [[ $aur == null ]]; then
+  mapfile -t names < <(printf '%s\n' "$@" "$(tr '[:upper:]' '[:lower:]' <<<"${repo#*/}")" | grep -v '^$' | awk '!seen[$0]++')
+  found=$(aur_search_json "${names[@]}")
+  if [[ $found == null ]]; then
     echo null
     return
   fi
-  same_app_of "$repo" "$website" <<<"$aur"
+  same_app_of "$repo" "$website" <<<"$found"
+}
+
+# Names among the given ones that belong to another app: a package in the
+# official repos, or on the AUR, whose homepage is neither github.com/<repo>
+# nor upstream's website. Such a name must stay out of provides= and
+# conflicts=. A JSON array of {name, where, url}.
+foreign_names_json() {
+  local repo=$1 website=${2:-} name info url aur found=()
+  shift 2
+  for name; do
+    info=$(pacman -Si "$name" 2>/dev/null) || continue
+    url=$(sed -n 's/^URL *: //p' <<<"$info" | head -1)
+    if [[ $(jq -n --arg u "$url" '[{Name: "x", URL: $u}]' | same_app_of "$repo" "$website") == '[]' ]]; then
+      found+=("$(jq -c -n --arg n "$name" --arg u "$url" '{name: $n, where: "official repos", url: (if $u == "" then null else $u end)}')")
+    fi
+  done
+  aur=$(aur_info_json "$@")
+  if [[ $aur != null ]]; then
+    while IFS= read -r name; do
+      [[ -n $name ]] && found+=("$name")
+    done < <(jq -c --argjson same "$(same_app_of "$repo" "$website" <<<"$aur")" \
+      '.[] | select(.Name as $n | ($ARGS.positional | index($n)) and ($same | map(.Name) | index($n) | not))
+       | {name: .Name, where: "AUR", url: .URL}' --args "$@" <<<"$aur")
+  fi
+  printf '%s\n' "${found[@]}" | jq -c -s 'map(select(. != null)) | unique_by(.name)'
 }
 
 # Filters aur_info_json's output on stdin down to the same app, as above.

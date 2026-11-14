@@ -41,6 +41,17 @@ serve() {
   echo "${2:-200}" >"$GHPKG_TEST_HTTP/$key.code"
 }
 
+# serve_aur json name...: what the AUR answers, for its exact-name lookup and
+# for a name search on each given name.
+serve_aur() {
+  local json=$1 name
+  shift
+  serve https://aur.archlinux.org/rpc/v5/info <<<"$json"
+  for name; do
+    serve "https://aur.archlinux.org/rpc/v5/search/$name" <<<"$json"
+  done
+}
+
 # serve_release owner/repo tag [asset-name digest]...: a latest release whose
 # assets are the given names. A digest of "-" means GitHub lists none.
 serve_release() {

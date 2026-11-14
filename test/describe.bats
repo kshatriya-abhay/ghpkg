@@ -131,7 +131,7 @@ describe_json_of() { describe "$@" --json; }
   echo '{"results":[
     {"Name":"myapp-bin","Description":"The same app","URL":"https://github.com/Me/MyApp/"},
     {"Name":"myapp","Description":"Another app entirely","URL":"https://example.com/other"}]}' |
-    serve https://aur.archlinux.org/rpc/v5/info
+    serve_aur "$(cat)" myapp other-name
 
   run describe_json_of me/myapp myapp-1.0-1-x86_64.pkg.tar.zst
   [[ $status -eq 0 ]]
@@ -140,13 +140,47 @@ describe_json_of() { describe "$@" --json; }
   [[ $output == *"AUR packages of this same app (for conflicts=):"*"myapp-bin  (homepage: this repo)"* ]]
 }
 
-@test "the AUR names checked include upstream's package name, not just the repo's" {
+@test "the AUR is searched by upstream's package name and the repo's name" {
   make_zst "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst" other-name 1.0
   publish me/myapp v1.0 "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst"
+  serve_aur '{"results":[]}' other-name myapp
   run describe_json_of me/myapp myapp-1.0-1-x86_64.pkg.tar.zst
-  for name in myapp myapp-bin myapp-git other-name other-name-bin other-name-git; do
-    grep -qE "(^| )arg\[\]=$name( |$)" "$GHPKG_TEST_LOG/curl"
-  done
+  [[ $(jq -c '.aur_same_app' <<<"$output") == '[]' ]]
+  grep -q '^https://aur.archlinux.org/rpc/v5/search/other-name .*by=name' "$GHPKG_TEST_LOG/curl"
+  grep -q '^https://aur.archlinux.org/rpc/v5/search/myapp .*by=name' "$GHPKG_TEST_LOG/curl"
+}
+
+@test "an AUR package of the same app under another name is found by the search" {
+  make_zst "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst" myapp 1.0
+  publish me/myapp v1.0 "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst"
+  # Like pot-translation for pot-app/pot-desktop: no -bin or -git form of a name.
+  echo '{"results":[{"Name":"myapp-translation","Description":"Same app","URL":"https://github.com/me/myapp"}]}' |
+    serve https://aur.archlinux.org/rpc/v5/search/myapp
+  echo '{"results":[]}' | serve https://aur.archlinux.org/rpc/v5/info
+  run describe_json_of me/myapp myapp-1.0-1-x86_64.pkg.tar.zst
+  [[ $(jq -c '[.aur_same_app[].Name]' <<<"$output") == '["myapp-translation"]' ]]
+}
+
+@test "upstream's package name, when it belongs to another app, is flagged for provides and conflicts" {
+  make_zst "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst" myapp 1.0
+  publish me/myapp v1.0 "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst"
+  # Like "pot" on the AUR, an unrelated app.
+  serve_aur '{"results":[{"Name":"myapp","Description":"Another app","URL":"https://github.com/someone/else"}]}' myapp
+  run describe_json_of me/myapp myapp-1.0-1-x86_64.pkg.tar.zst
+  [[ $(jq -c '.foreign_names' <<<"$output") == '[{"name":"myapp","where":"AUR","url":"https://github.com/someone/else"}]' ]]
+  [[ $(jq -c '.aur_same_app' <<<"$output") == '[]' ]]
+  [[ $(jq -r '.warnings[]' <<<"$output") == *"These names belong to other apps: myapp (AUR, https://github.com/someone/else)"* ]]
+}
+
+@test "the runtime-libraries warning names each program that links only to libc, even next to others" {
+  make_zst "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst" myapp 1.0
+  # A second program that links more than libc, like cardwire's daemon.
+  local dir=$BATS_TEST_TMPDIR/build-zst-myapp
+  cp "$(command -v jq)" "$dir/usr/bin/myapp-daemon"
+  (cd "$dir" && bsdtar --zstd -cf "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst" .PKGINFO usr)
+  publish me/myapp v1.0 "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst"
+  run describe_json_of me/myapp myapp-1.0-1-x86_64.pkg.tar.zst
+  [[ $(jq -r '.warnings[]' <<<"$output") == *"These programs link only to the basic C libraries: /usr/bin/myapp. "* ]]
 }
 
 @test "dependencies missing from the official repos are flagged, saying whether the AUR has them" {
@@ -154,7 +188,7 @@ describe_json_of() { describe "$@" --json; }
   publish me/myapp v1.0 "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst"
   printf 'core glibc 2.44-1\n' >"$GHPKG_TEST_DB/repo"
   echo '{"results":[{"Name":"gtk3","Description":"On the AUR","URL":"https://example.org"}]}' |
-    serve https://aur.archlinux.org/rpc/v5/info
+    serve_aur "$(cat)" myapp other-name
 
   run describe_json_of me/myapp myapp-1.0-1-x86_64.pkg.tar.zst
   [[ $(jq -c '.unavailable_depends' <<<"$output") == '[{"name":"gtk3","aur":true}]' ]]
@@ -177,7 +211,7 @@ describe_json_of() { describe "$@" --json; }
   echo '{"results":[
     {"Name":"myapp","Description":"Same app, website","URL":"http://www.example.org/myapp/"},
     {"Name":"myapp-git","Description":"Another app","URL":"https://example.org/other"}]}' |
-    serve https://aur.archlinux.org/rpc/v5/info
+    serve_aur "$(cat)" myapp other-name
   run describe_json_of me/myapp myapp-1.0-1-x86_64.pkg.tar.zst
   [[ $(jq -c '[.aur_same_app[] | [.Name, .matched]]' <<<"$output") == '[["myapp","website"]]' ]]
 }

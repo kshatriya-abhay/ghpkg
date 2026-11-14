@@ -204,8 +204,14 @@ describe_json() {
     meta=$(control_json "$work/meta/control/control")
   fi
   scripts=$(scripts_json "$work" "$kind")
-  local same_app unavailable='[]' deps=()
-  same_app=$(aur_same_app_json "$repo" "$(jq -r '.url // empty' <<<"$meta")" "$(jq -r '.name // empty' <<<"$meta")")
+  local same_app unavailable='[]' deps=() website names foreign
+  website=$(jq -r '.url // empty' <<<"$meta")
+  same_app=$(aur_same_app_json "$repo" "$website" "$(jq -r '.name // empty' <<<"$meta")")
+  # The names a PKGBUILD would put in provides= and conflicts=, checked for
+  # ones that belong to another app.
+  mapfile -t names < <({ jq -r '.name // empty, .provides[], .conflicts[]' <<<"$meta" | sed -E 's/[<>=].*//'
+    tr '[:upper:]' '[:lower:]' <<<"${repo#*/}"; } | grep -v '^$' | awk '!seen[$0]++')
+  foreign=$(foreign_names_json "$repo" "$website" "${names[@]}")
   if [[ $kind == pkg ]]; then
     mapfile -t deps < <(jq -r '.depends[]' <<<"$meta")
     (( ${#deps[@]} == 0 )) || unavailable=$(unavailable_deps_json "${deps[@]}")
@@ -217,13 +223,24 @@ describe_json() {
   # Things that need a person's decision.
   $FILE_VERIFIED || warnings+=("GitHub lists no checksum for $name, so the download can't be verified. Its sha256 is $FILE_SHA256.")
   [[ $kind == deb ]] && warnings+=("Dependencies are Debian package names. Each needs translating to its Arch name.")
+  if [[ $(jq length <<<"$foreign") -gt 0 ]]; then
+    warnings+=("These names belong to other apps: $(jq -r 'map("\(.name) (\(.where)" + (if .url then ", \(.url)" else "" end) + ")") | join(", ")' <<<"$foreign"). Leave them out of provides= and conflicts=: pacman would uninstall that app when installing yours.")
+  fi
   if [[ $(jq length <<<"$unavailable") -gt 0 ]]; then
     warnings+=("Upstream lists dependencies that aren't in the official repos: $(jq -r 'map(.name + (if .aur == true then " (on the AUR only)" elif .aur == false then " (not on the AUR either)" else "" end)) | join(", ")' <<<"$unavailable"). pacman can't install them as they are: find what replaced each one (for example the package that owns the library the program links to), make an AUR-only one optional, or leave it out.")
   fi
   [[ $(jq length <<<"$scripts") -gt 0 ]] && warnings+=("Has scripts that run as root when installing or removing: $(jq -r 'map(.name) | join(", ")' <<<"$scripts"). Read them before carrying them over.")
-  if [[ $(jq '[.binaries[] | select(.needed | length > 0)] | length' <<<"$libs") -gt 0 ]] &&
-    [[ $(jq '[.needed[] | select((.bundled | not) and (.basic | not))] | length' <<<"$libs") -eq 0 ]]; then
-    warnings+=("The programs link only to the basic C libraries. Programs like this usually load display, GL, sound or D-Bus libraries at runtime, so the dependency list may be incomplete: compare it with the AUR's PKGBUILD or upstream's docs.")
+  # Programs that link only to the basic C libraries, each judged on its own:
+  # one such GUI next to a daemon that links plenty still loads its display
+  # libraries at runtime.
+  local bare
+  bare=$(jq -r --arg basic "$BASIC_LIBS" '
+    ([.needed[] | select(.bundled) | .lib]) as $bundled
+    | .binaries[] | select((.needed | length) > 0)
+    | select(all(.needed[]; . as $l | ($basic | contains(" " + $l + " ")) or ($bundled | index($l) != null)))
+    | .path' <<<"$libs")
+  if [[ -n $bare ]]; then
+    warnings+=("These programs link only to the basic C libraries: $(paste -sd' ' <<<"$bare"). Programs like this usually load display, GL, sound or D-Bus libraries at runtime, so the dependency list may be incomplete: compare it with the AUR's PKGBUILD or upstream's docs, and look for library names inside the program (strings | grep '\.so').")
   fi
   [[ $(jq '.unresolved | length' <<<"$libs") -gt 0 ]] && warnings+=("Libraries not on this system: $(jq -r '.unresolved | join(", ")' <<<"$libs"). Find their Arch packages with 'pacman -F <library>'.")
   if grep -q '^opt/' <<<"$files" && ! grep -qE '^usr/bin/' <<<"$files"; then
@@ -245,7 +262,7 @@ describe_json() {
     --arg name "$name" --arg kind "$kind" --arg url "$FILE_URL" --arg path "$FILE_PATH" \
     --arg sha256 "$FILE_SHA256" --argjson verified "$FILE_VERIFIED" \
     --argjson meta "$meta" --argjson scripts "$scripts" \
-    --argjson same_app "$same_app" --argjson unavailable "$unavailable" \
+    --argjson same_app "$same_app" --argjson unavailable "$unavailable" --argjson foreign "$foreign" \
     --argjson called "$(called_scripts_json "$work" "$scripts")" \
     --argjson files "$(lines_json <<<"$files" | jq 'map(select(length > 0))')" \
     --argjson setuid "$(lines_json <<<"$setuid" | jq 'map(select(length > 0))')" \
@@ -254,7 +271,7 @@ describe_json() {
     '{repo: $repo, tag: $tag,
       file: {name: $name, kind: $kind, url: $url, path: $path, sha256: $sha256, verified: $verified},
       metadata: $meta, scripts: $scripts, called_scripts: $called,
-      aur_same_app: $same_app, unavailable_depends: $unavailable,
+      aur_same_app: $same_app, unavailable_depends: $unavailable, foreign_names: $foreign,
       files: {count: ($files | length),
               programs: [$files[] | select(test("^(usr/(local/)?s?bin|s?bin)/"))],
               desktop: [$files[] | select(test("^usr/share/applications/.*\\.desktop$"))],
