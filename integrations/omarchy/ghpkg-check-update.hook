@@ -1,0 +1,11 @@
+#!/bin/bash
+
+# Reports new GitHub releases for the packages in ~/.config/pkgbuilds after
+# `omarchy update`. Only reports: installing is up to me, with `ghpkg update`.
+# Installed with: omarchy hook install post-update ~/.config/pkgbuilds/ghpkg-check-update.hook
+
+command -v ghpkg >/dev/null || exit 0
+
+echo -e "\e[32m\nCheck GitHub packages\e[0m"
+ghpkg check-update
+echo
