@@ -5,7 +5,11 @@ _ghpkg_tips() {
     echo "ghpkg: on Omarchy, run 'ghpkg hook install' (as your user) to list ghpkg updates"
     echo "       at the end of every omarchy update, or 'ghpkg hook install --update' to install them."
   fi
-  echo "ghpkg: log in with 'gh auth login' for GitHub's 5000 requests an hour instead of 60."
+  # Only when gh is missing: this runs as root, so it can't see whether the user
+  # is logged in. If gh is there but logged out, ghpkg says so when it runs.
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "ghpkg: install github-cli and run 'gh auth login' for GitHub's 5000 requests an hour instead of 60."
+  fi
 }
 
 post_install() {
