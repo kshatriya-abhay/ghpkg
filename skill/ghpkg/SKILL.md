@@ -39,6 +39,7 @@ Read the one that matches the release file, plus `dependencies.md`, before writi
 1. **`ghpkg inspect <owner/repo>`.** It lists the release's Linux x86_64 files, best first, and says whether the official repos have the app, which names are taken on the AUR, and whether a PKGBUILD for it exists already.
    - **If the official repos have it:** tell the user and stop, unless they say otherwise. A repo package is better than any repack.
    - **If a PKGBUILD already uses this repo:** say so, and ask whether they want a second one.
+     - **If its package isn't installed** (`local_uninstalled` in `--json`, often after a `pacman -R`): the PKGBUILD is ready as it is. Hand the user `ghpkg update <package>` to install it, instead of writing a new one.
    - **If it says a package with the suggested name is installed already:** tell the user. It may come from another packages folder or an old install, and the new package would replace it.
    - **Note the tag line** ("Download links use the tag …"): it says whether `source=` needs `v$pkgver` or `$pkgver`. Don't assume a `v`.
    - **If there's no `.pkg.tar.zst` or `.deb`:** stop. ghpkg doesn't package archives, AppImages or `.rpm` files yet.

@@ -178,3 +178,30 @@ pkgbuild() { cat "$GHPKG_ROOT/myapp-gh/PKGBUILD"; }
   long=$(printf 'package-number-%s\n' 1 2 3 4 5 | bash_array)
   [[ $long == $'\n'"  'package-number-1'"* ]]
 }
+
+@test "add offers to install a PKGBUILD that's there but not installed" {
+  make_zst "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst" myapp 1.0
+  publish me/myapp v1.0 "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst"
+  make_pkgbuild myapp-gh me/myapp 1.0
+  cp "$GHPKG_ROOT/myapp-gh/PKGBUILD" "$BATS_TEST_TMPDIR/before"
+
+  # install it from its PKGBUILD instead, add another one
+  add_with n n
+  [[ $status -eq 0 ]]
+  [[ $output == *"Install myapp-gh from its PKGBUILD instead? [Y/n]"* ]]
+  [[ $output == *"You already have a PKGBUILD for me/myapp. Add another one?"* ]]
+  cmp "$GHPKG_ROOT/myapp-gh/PKGBUILD" "$BATS_TEST_TMPDIR/before"
+  [[ ! -s $GHPKG_TEST_LOG/sudo ]]
+}
+
+@test "add doesn't offer to install a PKGBUILD whose package is installed" {
+  make_zst "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst" myapp 1.0
+  publish me/myapp v1.0 "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst"
+  make_pkgbuild myapp-gh me/myapp 1.0
+  installed myapp-gh 1.0-1
+
+  add_with n
+  [[ $status -eq 0 ]]
+  [[ $output != *"from its PKGBUILD instead"* ]]
+  [[ $output == *"Add another one?"* ]]
+}

@@ -137,6 +137,15 @@ add() {
   if [[ $(jq -r '.official != null' <<<"$info") == true ]]; then
     confirm "The official repos have it. Package it from GitHub anyway?" n || return 0
   fi
+  local pkg
+  for pkg in $(jq -r '.local_uninstalled[]?' <<<"$info"); do
+    echo
+    if confirm "Install $pkg from its PKGBUILD instead?" y; then
+      require_sudo_terminal "update $pkg"
+      update "$pkg"
+      return
+    fi
+  done
   if [[ $(jq '.local | length' <<<"$info") -gt 0 ]]; then
     confirm "You already have a PKGBUILD for $repo. Add another one?" n || return 0
   fi

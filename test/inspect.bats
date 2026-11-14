@@ -79,6 +79,17 @@ setup() {
   [[ $output == *"Already set up as: myapp-gh."* ]]
 }
 
+@test "inspect says how to install a PKGBUILD whose package isn't installed" {
+  make_pkgbuild myapp-gh me/myapp 1.0
+  serve_release me/myapp v1.0 myapp-1.0-x86_64.pkg.tar.zst bbb
+  run inspect me/myapp
+  [[ $output == *"myapp-gh's PKGBUILD is here, but it isn't installed. To install it: ghpkg update myapp-gh"* ]]
+
+  installed myapp-gh 1.0-1
+  run inspect me/myapp
+  [[ $output != *"isn't installed"* ]]
+}
+
 @test "inspect copes with the AUR being unreachable" {
   rm "$GHPKG_TEST_HTTP"/*
   echo '{"name":"MyApp","description":"An app","license":null}' | serve https://api.github.com/repos/me/myapp
