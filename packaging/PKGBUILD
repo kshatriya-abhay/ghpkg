@@ -4,7 +4,7 @@
 # (packaging/ghpkg-gh) picks it up. By hand: cd packaging && makepkg
 
 pkgname=ghpkg
-pkgver=1.0.0
+pkgver=1.0.1
 pkgrel=1
 pkgdesc="Install apps from their GitHub releases as pacman packages, and keep them updated"
 arch=(any)

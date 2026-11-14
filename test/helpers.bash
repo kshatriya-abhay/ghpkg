@@ -13,6 +13,8 @@ setup_ghpkg() {
   export GHPKG_TEST_LOG=$BATS_TEST_TMPDIR/log
   mkdir -p "$GHPKG_ROOT" "$GHPKG_CACHE" "$GHPKG_TEST_HTTP" "$GHPKG_TEST_DB" "$GHPKG_TEST_LOG"
   touch "$GHPKG_TEST_DB"/{installed,repo,owners} "$GHPKG_TEST_LOG"/{curl,pacman,sudo,makepkg,updpkgsums}
+  # The test packages depend on these, so the official repos have them.
+  printf 'core glibc 2.44-1\nextra gtk3 1:3.24-1\n' >"$GHPKG_TEST_DB/repo"
 
   export PATH=$REPO_DIR/test/stubs:$PATH
   unset GITHUB_TOKEN GHPKG_TEST_GH_TOKEN GHPKG_TEST_SUDO GHPKG_TEST_OFFLINE GHPKG_TEST_MAKEPKG_FAIL

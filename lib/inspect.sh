@@ -76,6 +76,37 @@ aur_info_json() {
   fi
 }
 
+# The AUR packages that are this same app: among the plain, -bin and -git forms
+# of the given names and of the repo's name, those whose homepage is
+# github.com/<repo>, or is upstream's own website when one is given. A JSON
+# array of {Name, URL, matched} (matched is "repo" or "website"), or null when
+# the AUR can't be reached. A package that only shares a name is never
+# included: listing it in conflicts= would make pacman uninstall another app.
+aur_same_app_json() {
+  local repo=$1 website=${2:-} name candidates aur
+  shift 2
+  candidates=$(for name in "$@" "$(tr '[:upper:]' '[:lower:]' <<<"${repo#*/}")"; do
+    [[ -n $name ]] && printf '%s\n' "$name" "$name-bin" "$name-git"
+  done | awk '!seen[$0]++')
+  # shellcheck disable=SC2086 # one name per word
+  aur=$(aur_info_json $candidates)
+  if [[ $aur == null ]]; then
+    echo null
+    return
+  fi
+  same_app_of "$repo" "$website" <<<"$aur"
+}
+
+# Filters aur_info_json's output on stdin down to the same app, as above.
+same_app_of() {
+  jq -c --arg repo "https://github.com/$1" --arg site "${2:-}" '
+    def norm: ascii_downcase | sub("^https?://(www\\.)?"; "") | rtrimstr("/") | rtrimstr(".git");
+    [.[] | ((.URL // "") | norm) as $u
+     | if $u == ($repo | norm) then {Name, URL, matched: "repo"}
+       elif $site != "" and $u == ($site | norm) then {Name, URL, matched: "website"}
+       else empty end]'
+}
+
 # The official repos' package of that name, as JSON, or null.
 official_json() {
   local info

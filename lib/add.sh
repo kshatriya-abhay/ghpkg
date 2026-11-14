@@ -210,13 +210,16 @@ add() {
     echo "The AUR has packages with related names. List the ones that are this same app in"
     echo "conflicts=, so installing yours replaces them. Never an unrelated app that only shares"
     echo "a name: pacman would uninstall it."
-    jq -r --arg url "https://github.com/$repo" '.[] | "  \(.Name)  \(if ((.URL // "") | ascii_downcase | rtrimstr("/") | rtrimstr(".git")) == ($url | ascii_downcase) then "[same GitHub repo] " else "" end)\(.Description // "")"' <<<"$aur"
-    same_app=$(jq -r --arg url "https://github.com/$repo" '.[] | select(((.URL // "") | ascii_downcase | rtrimstr("/") | rtrimstr(".git")) == ($url | ascii_downcase)) | .Name' <<<"$aur")
+    local matches
+    matches=$(same_app_of "$repo" "$(jq -r '.metadata.url // empty' <<<"$desc")" <<<"$aur")
+    jq -r --argjson m "$matches" '.[] | .Name as $n | ($m | map(select(.Name == $n))[0].matched) as $why
+      | "  \(.Name)  \(if $why == "repo" then "[same GitHub repo] " elif $why == "website" then "[same website] " else "" end)\(.Description // "")"' <<<"$aur"
+    same_app=$(jq -r '.[].Name' <<<"$matches")
     echo
     if [[ -n $same_app ]]; then
-      echo "Proposed: $(paste -sd' ' <<<"$same_app") (their homepage is this repo)."
+      echo "Proposed: $(paste -sd' ' <<<"$same_app") (their homepage is this repo or upstream's website)."
     else
-      echo "Proposed: none (no homepage there is this repo)."
+      echo "Proposed: none (no homepage there is this repo or upstream's website)."
     fi
     answer=$(ask_letter "Use that? [y]es, [n]one, [e]dit:" yne)
     case $answer in

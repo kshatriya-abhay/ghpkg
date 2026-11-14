@@ -1,7 +1,7 @@
 #!/bin/bash
 # Test stand-in for pacman, backed by plain files in $GHPKG_TEST_DB:
 #   installed  "name version" for each installed package
-#   repo       "repository name version" for the official repos
+#   repo       "repository name version" for the official repos (-Si, -Sddp)
 #   owners     "path package" for pacman -Qo
 # Changes (-R, -U) are logged to $GHPKG_TEST_LOG/pacman.
 set -euo pipefail
@@ -16,6 +16,12 @@ case $1 in
     line=$(grep -m1 " $2 " "$db/repo") || { echo "error: package '$2' was not found" >&2; exit 1; }
     read -r repo name version <<<"$line"
     printf 'Repository      : %s\nName            : %s\nVersion         : %s\n' "$repo" "$name" "$version"
+    ;;
+  -Sddp)
+    # pacman -Sddp --print-format %n <dep>: is it in the repos?
+    dep=${4%%[<>=]*}
+    line=$(grep -m1 " $dep " "$db/repo") || { echo "error: target not found: $dep" >&2; exit 1; }
+    echo "$dep"
     ;;
   -Qoq)
     shift

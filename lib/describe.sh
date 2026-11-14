@@ -156,6 +156,26 @@ libraries_json() {
     '{binaries: $binaries, needed: ., unresolved: [.[] | select(.bundled | not) | select(.owner == null) | .lib]}'
 }
 
+# Upstream's dependencies (Arch names) that pacman can't install from the
+# official repos, as a JSON array of {name, aur}: aur is true when the AUR has
+# a package of that name, false when nothing does, null when the AUR can't be
+# reached. Installed packages and anything the repos provide count as fine.
+unavailable_deps_json() {
+  local dep missing=() aur
+  for dep; do
+    pacman -T "$dep" >/dev/null 2>&1 && continue
+    pacman -Sddp --print-format %n "$dep" >/dev/null 2>&1 && continue
+    missing+=("${dep%%[<>=]*}")
+  done
+  if (( ${#missing[@]} == 0 )); then
+    echo '[]'
+    return
+  fi
+  aur=$(aur_info_json "${missing[@]}")
+  jq -c -n --argjson aur "$aur" '$ARGS.positional | map(. as $n |
+    {name: $n, aur: (if $aur == null then null else ($aur | map(.Name) | index($n) != null) end)})' --args "${missing[@]}"
+}
+
 # Icon folders the system's hicolor theme doesn't know, such as "256x256/app".
 odd_icon_dirs() {
   [[ -f $HICOLOR_INDEX ]] || return 0
@@ -184,6 +204,12 @@ describe_json() {
     meta=$(control_json "$work/meta/control/control")
   fi
   scripts=$(scripts_json "$work" "$kind")
+  local same_app unavailable='[]' deps=()
+  same_app=$(aur_same_app_json "$repo" "$(jq -r '.url // empty' <<<"$meta")" "$(jq -r '.name // empty' <<<"$meta")")
+  if [[ $kind == pkg ]]; then
+    mapfile -t deps < <(jq -r '.depends[]' <<<"$meta")
+    (( ${#deps[@]} == 0 )) || unavailable=$(unavailable_deps_json "${deps[@]}")
+  fi
   files=$(cd "$work/root" && find . \( -type f -o -type l \) -printf '%P\n' | sort)
   setuid=$(bsdtar -tvf "$DATA_ARCHIVE" | grep -E '^-..[sS]|^-.....[sS]' | sed -E 's/^([^ ]+ +){8}//; s#^\./##' || true)
   libs=$(libraries_json "$work/root")
@@ -191,6 +217,9 @@ describe_json() {
   # Things that need a person's decision.
   $FILE_VERIFIED || warnings+=("GitHub lists no checksum for $name, so the download can't be verified. Its sha256 is $FILE_SHA256.")
   [[ $kind == deb ]] && warnings+=("Dependencies are Debian package names. Each needs translating to its Arch name.")
+  if [[ $(jq length <<<"$unavailable") -gt 0 ]]; then
+    warnings+=("Upstream lists dependencies that aren't in the official repos: $(jq -r 'map(.name + (if .aur == true then " (on the AUR only)" elif .aur == false then " (not on the AUR either)" else "" end)) | join(", ")' <<<"$unavailable"). pacman can't install them as they are: find what replaced each one (for example the package that owns the library the program links to), make an AUR-only one optional, or leave it out.")
+  fi
   [[ $(jq length <<<"$scripts") -gt 0 ]] && warnings+=("Has scripts that run as root when installing or removing: $(jq -r 'map(.name) | join(", ")' <<<"$scripts"). Read them before carrying them over.")
   if [[ $(jq '[.binaries[] | select(.needed | length > 0)] | length' <<<"$libs") -gt 0 ]] &&
     [[ $(jq '[.needed[] | select((.bundled | not) and (.basic | not))] | length' <<<"$libs") -eq 0 ]]; then
@@ -216,6 +245,7 @@ describe_json() {
     --arg name "$name" --arg kind "$kind" --arg url "$FILE_URL" --arg path "$FILE_PATH" \
     --arg sha256 "$FILE_SHA256" --argjson verified "$FILE_VERIFIED" \
     --argjson meta "$meta" --argjson scripts "$scripts" \
+    --argjson same_app "$same_app" --argjson unavailable "$unavailable" \
     --argjson called "$(called_scripts_json "$work" "$scripts")" \
     --argjson files "$(lines_json <<<"$files" | jq 'map(select(length > 0))')" \
     --argjson setuid "$(lines_json <<<"$setuid" | jq 'map(select(length > 0))')" \
@@ -224,6 +254,7 @@ describe_json() {
     '{repo: $repo, tag: $tag,
       file: {name: $name, kind: $kind, url: $url, path: $path, sha256: $sha256, verified: $verified},
       metadata: $meta, scripts: $scripts, called_scripts: $called,
+      aur_same_app: $same_app, unavailable_depends: $unavailable,
       files: {count: ($files | length),
               programs: [$files[] | select(test("^(usr/(local/)?s?bin|s?bin)/"))],
               desktop: [$files[] | select(test("^usr/share/applications/.*\\.desktop$"))],
@@ -277,6 +308,10 @@ print_description() {
     section("Optional dependencies"; $m.optdepends),
     section("Provides"; $m.provides),
     section("Conflicts"; $m.conflicts),
+    (if .aur_same_app == null then "", "AUR packages of this same app: couldn'"'"'t reach the AUR"
+     elif (.aur_same_app | length) == 0 then "", "AUR packages of this same app: none"
+     else "", "AUR packages of this same app (for conflicts=):",
+       (.aur_same_app[] | "  \(.Name)  (homepage: " + (if .matched == "repo" then "this repo" else "upstream'"'"'s website, \(.URL)" end) + ")") end),
     section("Backup files"; $m.backup),
     (if (.scripts | length) == 0 then "", "Scripts that run as root: none"
      else "", "Scripts that run as root:",

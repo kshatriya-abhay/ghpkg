@@ -8,7 +8,8 @@ scripts, and fixing the layout.
 
 ## What to take from `ghpkg describe`
 
-- `metadata.name`, `metadata.description`, `metadata.url`: as for a `.zst`.
+- `metadata.name`, `metadata.url`: as for a `.zst`. `aur_same_app` too: those packages go in `conflicts=`, and no other AUR names.
+- `metadata.description`: the first line of the control file's description. It becomes `pkgdesc`, with " (from the upstream GitHub release)" after it, as for a `.zst`. If it's a slogan rather than a description of what the app does ("Less chaos. More flow."), use the GitHub repo's description (`ghpkg inspect` shows it), or write a short plain one, and say so when you show the PKGBUILD. Leave out emoji.
 - `metadata.licenses` is empty: a `.deb`'s control file has no licence field. Look at `usr/share/doc/<name>/copyright` in the package, or the GitHub repo's licence (`ghpkg inspect` shows it).
 - `metadata.depends` and `metadata.optdepends` are **Debian names**. Translate each one; see `dependencies.md`.
 - `scripts`: `preinst`, `postinst`, `prerm`, `postrm`, if any.

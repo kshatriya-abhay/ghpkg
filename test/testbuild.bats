@@ -98,6 +98,33 @@ EOF
   [[ $output == *"only in the build:        /usr/bin/myapp"* ]]
 }
 
+@test "test-build reports permission changes, such as a removed setuid bit" {
+  local file=$GHPKG_CACHE/sources/myapp-1.0.deb
+  make_deb "$file" myapp 1.0
+  mkdir -p "$GHPKG_ROOT/myapp-gh"
+  cat >"$GHPKG_ROOT/myapp-gh/PKGBUILD" <<EOF
+pkgname=myapp-gh
+_ghrepo=me/myapp
+pkgver=1.0
+pkgrel=1
+arch=(x86_64)
+url="https://github.com/\$_ghrepo"
+options=(!strip !debug)
+source=("myapp-\$pkgver.deb::\$url/releases/download/v\$pkgver/myapp_amd64.deb")
+sha256sums=('$(sha256sum "$file" | cut -d' ' -f1)')
+
+package() {
+  bsdtar -xf "\$srcdir"/data.tar* -C "\$pkgdir"
+  chmod 755 "\$pkgdir/opt/App Name/chrome-sandbox"
+}
+EOF
+  run ghpkg test-build myapp-gh
+  [[ $status -eq 0 ]]
+  [[ $output == *"Files: the same"* ]]
+  [[ $output == *"Permissions that differ:"*"/opt/App Name/chrome-sandbox: -rwsr-xr-x in the release file, -rwxr-xr-x in the build"* ]]
+  [[ $(grep -c 'in the release file, ' <<<"$output") -eq 1 ]]
+}
+
 @test "a .deb with an uncompressed data.tar, storing folders without a slash, lists only its files" {
   local dir=$BATS_TEST_TMPDIR/slashless file=$BATS_TEST_TMPDIR/slashless.deb
   mkdir -p "$dir/data/usr/bin" "$dir/data/usr/share/applications" "$dir/control"

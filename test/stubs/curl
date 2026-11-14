@@ -1,14 +1,15 @@
 #!/bin/bash
 # Test stand-in for curl. Answers from files that test/helpers.bash's `serve`
-# writes, and logs each request (URL and headers) to $GHPKG_TEST_LOG/curl.
+# writes, and logs each request (URL, headers and --data-urlencode values) to $GHPKG_TEST_LOG/curl.
 set -euo pipefail
 
-url='' out='' write='' fail=false headers=()
+url='' out='' write='' fail=false headers=() data=()
 while (( $# )); do
   case $1 in
     -o) out=$2; shift ;;
     -w) write=$2; shift ;;
     -H) headers+=("$2"); shift ;;
+    --data-urlencode) data+=("$2"); shift ;;
     --max-time | --connect-timeout | --retry | --retry-delay) shift ;;
     --*) ;;
     -*) [[ $1 == *f* ]] && fail=true ;;
@@ -17,7 +18,7 @@ while (( $# )); do
   shift
 done
 
-printf '%s %s\n' "$url" "${headers[*]}" >>"$GHPKG_TEST_LOG/curl"
+printf '%s %s %s\n' "$url" "${headers[*]}" "${data[*]}" >>"$GHPKG_TEST_LOG/curl"
 [[ -z ${GHPKG_TEST_OFFLINE:-} ]] || exit 6
 
 key=$(printf '%s' "$url" | sha256sum | cut -c1-16)

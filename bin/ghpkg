@@ -116,16 +116,17 @@ Usage: ghpkg describe <owner/repo or GitHub URL> <release file> [--json]
 Downloads a .pkg.tar.zst or .deb from the latest release into the cache,
 checks it against GitHub's checksum, and shows what's inside: metadata,
 dependencies, scripts that run as root, the files, the libraries the programs
-link to and which packages own them, and anything that needs a decision.
-Runs nothing from the package.
+link to and which packages own them, the AUR packages that are this same app
+(for conflicts=), and anything that needs a decision, such as dependencies the
+official repos don't have. Runs nothing from the package.
 EOF
       ;;
     test-build) cat <<'EOF'
 Usage: ghpkg test-build <package>
 
 Builds the package in the cache without installing it or checking its
-dependencies, then shows the result and compares its files with the release
-file it came from.
+dependencies, then shows the result and compares its files, and their
+permissions, with the release file it came from.
 EOF
       ;;
     skill) cat <<'EOF'

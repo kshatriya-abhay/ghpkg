@@ -41,24 +41,27 @@ Read the one that matches the release file, plus `dependencies.md`, before writi
    - **If a PKGBUILD already uses this repo:** say so, and ask whether they want a second one.
    - **If there's no `.pkg.tar.zst` or `.deb`:** stop. ghpkg doesn't package archives, AppImages or `.rpm` files yet.
 2. **Ask: which file, and which name.** Propose the best-ranked file and the suggested `<app>-gh` name. Ask only when there's a real choice: several files of the same kind, a `-gh` name that's taken, or an upstream name worth keeping.
-3. **`ghpkg describe <owner/repo> <file>`.** It downloads the file into the cache, checks it against GitHub's checksum, and reports the metadata, dependencies, scripts that run as root, files, linked libraries and warnings. Add `--json` to read it as data.
+3. **`ghpkg describe <owner/repo> <file>`.** It downloads the file into the cache, checks it against GitHub's checksum, and reports the metadata, dependencies, scripts that run as root, files, linked libraries, the AUR packages that are this same app, and warnings. Add `--json` to read it as data.
+   - **Tell the user about the checksum now,** before going on: the download matched GitHub's checksum, or GitHub lists none, so it can't be verified and the PKGBUILD will use the hash of this download.
 4. **Read the AUR's PKGBUILD,** if one exists for the app, as a reference for dependencies and layout:
    `curl -fsSL "https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=<aur-name>"`
 5. **Ask: the dependencies.** Follow `dependencies.md`. Show the table, wait for the answer, and use exactly what the user confirmed.
-6. **Ask: scripts that run as root, and layout fixes.** Show every script in full, plus the scripts it calls (describe includes them), with a short plain summary of what each does. Ask whether to carry them over as they are, change them, or stop. Then list each layout fix you propose (see `deb.md`) and ask yes or no for each.
-7. **Write the PKGBUILD** from the template, and the install file if one was agreed. Show the user the complete file and ask before saving it to `~/.config/pkgbuilds/<name>/`.
+6. **Ask: scripts that run as root, and layout fixes.** Print every script in full in your reply, plus the scripts it calls (describe includes them), with a short plain summary of what each does. Ask whether to carry them over as they are, change them, or stop. Then list each layout fix you propose (see `deb.md`) and ask yes or no for each.
+7. **Write the PKGBUILD** from the template, and the install file if one was agreed. Print the complete file in your reply, then ask before saving it to `~/.config/pkgbuilds/<name>/`.
 8. **`ghpkg test-build <name>`.** It builds without installing and compares the files with the release file. Show the user the result. If files differ, explain each difference.
 9. **Hand over.** Tell the user to run `ghpkg update <name>` in their own terminal. It needs sudo, so it fails without a terminal.
 
 ## Where you must stop and ask
 
-| When | Show | The user decides |
+| When | Show, in your reply | The user decides |
 |---|---|---|
 | Source and name | The candidate files, ranked, and the proposed name | Which file and which name (skip if there's only one sensible choice) |
 | Dependencies | The table from `dependencies.md` | What goes in `depends=` and `optdepends=` |
 | Root scripts | Each script in full, with a summary | Carry over as is, change, or stop |
 | Layout fixes | Each proposed change | Yes or no to each |
 | Final PKGBUILD | The whole file | Save it, or change something |
+
+**Show it in your own reply, then ask.** Write the table, the scripts and the PKGBUILD into your message as text, before the question. Don't rely on the user seeing command output or a file you wrote: many agents collapse or hide those. A question tool's text can't hold a table or a long file either, so don't put them only there. A question may repeat the gist ("Use the dependencies in the table above?").
 
 Use your question tool if you have one. Otherwise ask in plain text and wait for the answer. Never fill in an answer yourself.
 
@@ -81,5 +84,6 @@ Use your question tool if you have one. Otherwise ask in plain text and wait for
 - Each `source` URL is the release file's download link with `$pkgver` in place of the version, so `ghpkg update` can find GitHub's checksum for the new file. If the version is part of the tag, write the tag as `v$pkgver` (or `$pkgver`).
 - If the file name has no version in it, give the download a versioned name: `app-$pkgver.deb::$url/releases/download/v$pkgver/app_amd64.deb`.
 - `sha256sums=(…)` stays on one line. `ghpkg update` rewrites it.
-- `provides=` and `conflicts=` list upstream's package name and the AUR's names for the app, so installing replaces them cleanly.
+- `provides=` lists the app's own names: upstream's package name, and what upstream's package provides.
+- `conflicts=` lists those plus the AUR packages that are this same app, exactly as `describe` reports them ("AUR packages of this same app", `aur_same_app` in `describe --json`). Never add AUR names you haven't seen there, and never an AUR package that only shares a name: pacman would uninstall that other app.
 - `options=(!strip !debug)`: the binaries are prebuilt; leave them as they are.

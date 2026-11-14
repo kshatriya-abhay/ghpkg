@@ -2,16 +2,26 @@
 # test-build: build a package without installing it, and compare the result
 # with the release file it came from.
 
-# The files in a package or .deb, one per line, without metadata or folders.
-# Folders are dropped by their type in the listing, not by a trailing slash:
-# some .deb tools store "usr/bin" rather than "usr/bin/".
-package_files() {
+# The files in a package or .deb, one "mode<TAB>path" line each, without
+# metadata or folders. Folders are dropped by their type in the listing, not
+# by a trailing slash: some .deb tools store "usr/bin" rather than "usr/bin/".
+package_listing() {
   case $1 in
     *.pkg.tar.*) bsdtar -tvf "$1" ;;
     *.deb) bsdtar -xOf "$1" 'data.tar*' | bsdtar -tvf - ;;
   esac | grep -v '^d' |
-    sed -E 's/^([^ ]+ +){8}//; s/ (->|link to) .*$//; s#^\./##' |
-    grep -vE '^\.(PKGINFO|BUILDINFO|MTREE|INSTALL)$|^\.?$' | sort
+    sed -E 's/^([^ ]+) +([^ ]+ +){7}/\1\t/; s/ (->|link to) .*$//; s#\t\./#\t#' |
+    awk -F '\t' '$2 != "" && $2 != "." && $2 !~ /^\.(PKGINFO|BUILDINFO|MTREE|INSTALL)$/' |
+    LC_ALL=C sort -t $'\t' -k2
+}
+
+# Just the paths.
+package_files() { package_listing "$1" | cut -f2 | sort; }
+
+# Files in both whose permissions differ, as "path<TAB>before<TAB>after".
+changed_modes() {
+  LC_ALL=C join -t $'\t' -1 2 -2 2 <(package_listing "$1") <(package_listing "$2") |
+    awk -F '\t' '$2 != $3'
 }
 
 test_build() {
@@ -75,6 +85,12 @@ test_build() {
       echo "Files that differ from ${original##*/}:"
       grep '^<' <<<"$diffs" | sed 's#^< #  only in the release file: /#' | head -40 || true
       grep '^>' <<<"$diffs" | sed 's#^> #  only in the build:        /#' | head -40 || true
+    fi
+    local modes
+    modes=$(changed_modes "$original" "$built")
+    if [[ -n $modes ]]; then
+      echo "Permissions that differ:"
+      awk -F '\t' '{ printf "  /%s: %s in the release file, %s in the build\n", $1, $2, $3 }' <<<"$modes" | head -40
     fi
   fi
 }

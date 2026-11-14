@@ -124,3 +124,60 @@ describe_json_of() { describe "$@" --json; }
   [[ $output == *"--- postinst ---"* ]]
   [[ $output == *"Needs a decision:"* ]]
 }
+
+@test "AUR packages whose homepage is the same repo are named; one that only shares a name isn't" {
+  make_zst "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst" myapp 1.0
+  publish me/myapp v1.0 "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst"
+  echo '{"results":[
+    {"Name":"myapp-bin","Description":"The same app","URL":"https://github.com/Me/MyApp/"},
+    {"Name":"myapp","Description":"Another app entirely","URL":"https://example.com/other"}]}' |
+    serve https://aur.archlinux.org/rpc/v5/info
+
+  run describe_json_of me/myapp myapp-1.0-1-x86_64.pkg.tar.zst
+  [[ $status -eq 0 ]]
+  [[ $(jq -c '[.aur_same_app[].Name]' <<<"$output") == '["myapp-bin"]' ]]
+  run describe me/myapp myapp-1.0-1-x86_64.pkg.tar.zst
+  [[ $output == *"AUR packages of this same app (for conflicts=):"*"myapp-bin  (homepage: this repo)"* ]]
+}
+
+@test "the AUR names checked include upstream's package name, not just the repo's" {
+  make_zst "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst" other-name 1.0
+  publish me/myapp v1.0 "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst"
+  run describe_json_of me/myapp myapp-1.0-1-x86_64.pkg.tar.zst
+  for name in myapp myapp-bin myapp-git other-name other-name-bin other-name-git; do
+    grep -qE "(^| )arg\[\]=$name( |$)" "$GHPKG_TEST_LOG/curl"
+  done
+}
+
+@test "dependencies missing from the official repos are flagged, saying whether the AUR has them" {
+  make_zst "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst" myapp 1.0
+  publish me/myapp v1.0 "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst"
+  printf 'core glibc 2.44-1\n' >"$GHPKG_TEST_DB/repo"
+  echo '{"results":[{"Name":"gtk3","Description":"On the AUR","URL":"https://example.org"}]}' |
+    serve https://aur.archlinux.org/rpc/v5/info
+
+  run describe_json_of me/myapp myapp-1.0-1-x86_64.pkg.tar.zst
+  [[ $(jq -c '.unavailable_depends' <<<"$output") == '[{"name":"gtk3","aur":true}]' ]]
+  [[ $(jq -r '.warnings[]' <<<"$output") == *"aren't in the official repos: gtk3 (on the AUR only)"* ]]
+}
+
+@test "an installed dependency isn't flagged, even when the repos no longer have it" {
+  make_zst "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst" myapp 1.0
+  publish me/myapp v1.0 "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst"
+  printf 'core glibc 2.44-1\n' >"$GHPKG_TEST_DB/repo"
+  installed gtk3 3.24-1
+  run describe_json_of me/myapp myapp-1.0-1-x86_64.pkg.tar.zst
+  [[ $(jq -c '.unavailable_depends' <<<"$output") == '[]' ]]
+}
+
+@test "an AUR package whose homepage is upstream's own website counts as the same app" {
+  make_zst "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst" myapp 1.0
+  publish me/myapp v1.0 "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst"
+  # make_zst's .PKGINFO says url = https://example.org/myapp
+  echo '{"results":[
+    {"Name":"myapp","Description":"Same app, website","URL":"http://www.example.org/myapp/"},
+    {"Name":"myapp-git","Description":"Another app","URL":"https://example.org/other"}]}' |
+    serve https://aur.archlinux.org/rpc/v5/info
+  run describe_json_of me/myapp myapp-1.0-1-x86_64.pkg.tar.zst
+  [[ $(jq -c '[.aur_same_app[] | [.Name, .matched]]' <<<"$output") == '[["myapp","website"]]' ]]
+}

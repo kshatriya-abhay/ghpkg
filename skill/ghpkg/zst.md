@@ -8,10 +8,12 @@ with the user by hand.
 ## What to take from `ghpkg describe`
 
 - `metadata.name`: upstream's package name. Put it in `provides=` and `conflicts=`.
+- `aur_same_app`: the AUR packages that are this same app (their homepage is the repo or upstream's website). Put each in `conflicts=`, and no other AUR names.
 - `metadata.description`: becomes `pkgdesc`, with " (from the upstream GitHub release)" after it.
 - `metadata.licenses`: becomes `license=`.
 - `metadata.depends` and `metadata.optdepends`: already Arch names. They're the starting point for the dependency table (`dependencies.md`), not the final answer.
 - `metadata.provides` and `metadata.conflicts`: keep the names (without version constraints) in your own `provides=` and `conflicts=`.
+- `unavailable_depends`: upstream's dependencies that the official repos don't have. See `dependencies.md`.
 - `scripts`: an `.INSTALL`, if there is one. See below.
 
 ## The PKGBUILD
@@ -40,7 +42,8 @@ Upstream file names sometimes include their own pkgrel, for example `app-1.2.0-1
 The repack leaves upstream's `.INSTALL` out (it's excluded in `package()`), so
 anything it does is lost unless you carry it over:
 
-1. Show the user the `.INSTALL` and every script it calls, from `describe`'s `scripts` and `called_scripts`, with a short summary of what each does.
+1. Print the `.INSTALL` and every script it calls in your reply, in full, from `describe`'s `scripts` and `called_scripts`, with a short summary of what each does.
+   - Point out any command that pacman's own hooks already run on Arch (the list is in `deb.md`, under "Maintainer scripts"), and propose leaving it out. An `.INSTALL` that does nothing else needs no install file.
 2. If they agree, copy its functions into `templates/pkgname.install`, save it as `<pkgname>.install` next to the PKGBUILD, and set `install=<pkgname>.install`.
 3. The scripts it calls (such as `/usr/share/<app>/post-install.sh`) ship inside the package, so the install file only needs to call them, as upstream's does.
 
