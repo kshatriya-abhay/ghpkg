@@ -1,7 +1,7 @@
 # shellcheck shell=bash disable=SC2034 # GHPKG_VERSION is read by bin/ghpkg
 # Settings and helpers every command uses. Safe to source on its own.
 
-GHPKG_VERSION=1.0.2
+GHPKG_VERSION=1.0.3
 
 # Where the PKGBUILDs live, and where downloads and builds go. Both can be
 # moved with environment variables.
