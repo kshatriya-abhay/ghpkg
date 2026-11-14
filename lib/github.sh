@@ -1,4 +1,4 @@
-# shellcheck shell=bash
+# shellcheck shell=bash disable=SC2034 # sets GH_BODY and GH_ERROR for its callers
 # Talking to GitHub's API. Requests carry a token when one is available, which
 # raises GitHub's limit from 60 requests an hour to 5000.
 
@@ -15,10 +15,15 @@ github_token() {
 # message a person can act on, and returns 1.
 gh_get() {
   local url=$1 out code body auth=()
-  GH_BODY= GH_ERROR=
+  GH_BODY='' GH_ERROR=''
 
   github_token
-  [[ -z $GITHUB_TOKEN ]] || auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
+  if [[ -n $GITHUB_TOKEN ]]; then
+    auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
+  elif [[ -z ${_ghpkg_token_tip_shown:-} ]]; then
+    _ghpkg_token_tip_shown=1
+    tip "you aren't logged in to GitHub, which allows 60 requests an hour. Log in with 'gh auth login' (or set GITHUB_TOKEN) for 5000 an hour."
+  fi
 
   # A dead connection gives up after 10 seconds and is tried twice more.
   if ! out=$(curl -sSL --connect-timeout 10 --max-time 30 --retry 2 --retry-delay 1 \

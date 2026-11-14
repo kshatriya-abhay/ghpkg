@@ -13,12 +13,16 @@ Many projects attach a ready-made `.pkg.tar.zst` or `.deb` to every GitHub relea
 ```bash
 git clone https://github.com/kshatriya-abhay/ghpkg
 cd ghpkg
-make install            # into ~/.local; or: sudo make install PREFIX=/usr
+./install.sh
 ```
 
-`packaging/PKGBUILD` builds ghpkg itself as a pacman package from a tagged release.
+`install.sh` installs ghpkg from its latest GitHub release **as a ghpkg package**, `ghpkg-gh`, so `ghpkg update` keeps ghpkg itself updated too. On Omarchy it also offers to add the post-update hook (below). It asks for sudo once, to install.
 
-ghpkg needs `bash`, `curl`, `jq`, `pacman`, `pacman-contrib` (for `updpkgsums`), `libarchive` (for `bsdtar`) and `sudo`. `github-cli` is optional: when you're logged in with `gh`, ghpkg uses your token, so GitHub allows 5000 requests an hour instead of 60. A `GITHUB_TOKEN` environment variable works too.
+ghpkg needs `bash`, `curl`, `jq`, `base-devel` (for `makepkg` and `fakeroot`), `pacman-contrib` (for `updpkgsums`), `libarchive` (for `bsdtar`) and `binutils` (for `readelf`).
+
+**Log in to GitHub for higher limits.** Without a login, GitHub allows 60 API requests an hour, which a handful of packages can use up. With `gh auth login` (from `github-cli`), or a `GITHUB_TOKEN` environment variable, ghpkg uses your token and gets 5000 an hour. ghpkg prints a tip when it has no token; `GHPKG_NO_TIPS=1` turns tips off. (The token doesn't change download speeds: release files come from GitHub's file servers either way.)
+
+To install from the checkout without pacman tracking it, `make install` copies ghpkg into `~/.local` (or `sudo make install PREFIX=/usr`).
 
 ## Commands
 
@@ -28,6 +32,12 @@ ghpkg needs `bash`, `curl`, `jq`, `pacman`, `pacman-contrib` (for `updpkgsums`),
 | `ghpkg update [package...]` | For each package with a newer release: sets the PKGBUILD's version, takes the checksum from GitHub, then builds and installs with `makepkg -si`. With no names it updates every installed package. Name a package that isn't installed yet to install it. |
 | `ghpkg list` | Lists the packages with their installed and PKGBUILD versions and GitHub repos. Works offline. |
 | `ghpkg remove <package>` | Uninstalls a package, then asks whether to delete its PKGBUILD folder too. |
+| `ghpkg add <owner/repo>` | Adds an app whose release has a `.pkg.tar.zst`, asking you at each step (below). |
+| `ghpkg inspect <owner/repo>` | Shows the latest release's Linux x86_64 files, best first, whether the official repos have the app, and which names are taken on the AUR. |
+| `ghpkg describe <owner/repo> <file>` | Downloads a `.pkg.tar.zst` or `.deb` from the release, checks it against GitHub's checksum, and shows what's inside: dependencies, scripts that run as root, files, linked libraries, and what needs a decision. Runs nothing from the package. |
+| `ghpkg test-build <package>` | Builds a package without installing it, and compares its files with the release file. |
+| `ghpkg skill install` | Links the ghpkg skill into your coding agents' skill folders (below). |
+| `ghpkg hook install [--update]` | On Omarchy, runs ghpkg after every `omarchy update` (below). |
 | `ghpkg help [command]` | Shows help. |
 
 `update` and `remove` need a terminal, because sudo asks for your password. Without one, ghpkg stops before downloading or changing anything.
@@ -40,6 +50,41 @@ stremio-service-gh 0.1.22-1 (up to date)
 ghpkg: 1 packages can be updated. 2/3 packages up-to-date.
 run `ghpkg update`
 ```
+
+## Adding an app
+
+### From a `.pkg.tar.zst`: `ghpkg add`
+
+Many projects attach a ready-made Arch package to their releases. `ghpkg add` turns one into a ghpkg package, asking you at each step. Nothing is written until you say so:
+
+1. **The release:** which file to use, and a warning if the official repos already have the app.
+2. **What's inside:** the package's metadata, dependencies and files, and any script it runs as root, shown in full.
+3. **The name:** `<app>-gh` by default, checked against the AUR. If the AUR has the same app under other names (matched by its homepage), you choose which ones yours replaces. An unrelated package that only shares a name is never added.
+4. **Dependencies:** upstream's list, plus packages that own the libraries the programs link to. Each says where it came from and whether it's installed. Keep them, take upstream's only, or edit the list.
+5. **Scripts that run as root:** carry upstream's install script over, leave it out, or stop.
+6. **The PKGBUILD:** shown in full before it's saved.
+7. **A test build,** then an offer to install.
+
+```bash
+ghpkg add storytold/pdfcraft
+```
+
+### From a `.deb`: with a coding agent
+
+Packaging a `.deb` takes judgement: Debian's dependency names need translating, maintainer scripts don't map onto pacman's, and the files often need moving. ghpkg comes with an agent skill for this:
+
+```bash
+ghpkg skill install      # links it into ~/.claude/skills, ~/.codex/skills and ~/.agents/skills
+```
+
+Then ask your agent to add the app with ghpkg. The skill has it use `inspect`, `describe` and `test-build` for the mechanical work. It stops to ask you about:
+- the release file and name
+- the dependencies, from a table that says where each came from
+- every script that runs as root
+- each layout fix
+- the final PKGBUILD
+
+It never installs anything: it hands you the `ghpkg update` command to run yourself. The same skill helps with `.zst` releases, and with fixing an update that fails.
 
 ## Where things live
 
@@ -89,11 +134,37 @@ If upstream's package has an install script (`.INSTALL`), copy what it does into
 
 ## Omarchy
 
-On [Omarchy](https://omarchy.org), a post-update hook lists your ghpkg packages at the end of every `omarchy update`. It only reports, and never installs:
+On [Omarchy](https://omarchy.org), ghpkg can run at the end of every `omarchy update`:
 
 ```bash
-omarchy hook install post-update integrations/omarchy/ghpkg-check-update.hook
+ghpkg hook install            # list the packages that can be updated; never installs
+ghpkg hook install --update   # install the updates too; pacman still asks first
+ghpkg hook status             # which one is installed
+ghpkg hook remove
 ```
+
+`install.sh` offers the first one.
+
+## Roadmap
+
+Done in 1.0:
+- the standalone tool and its tests
+- the agent skill, with `inspect`, `describe` and `test-build`
+- `ghpkg add` for `.pkg.tar.zst` releases
+- ghpkg installing itself as a ghpkg package
+- the Omarchy hook command
+
+Next:
+
+- **Safer updates.**
+  - When upstream renames its release file, `ghpkg update` offers the closest match instead of failing.
+  - Before installing an update, it shows what changed in the dependencies and in any script that runs as root, and asks.
+- **Later, maybe.**
+  - `ghpkg add` for `.deb` releases with no agent.
+  - `.tar.gz` and AppImage releases.
+  - Checking release signatures where upstream signs them.
+  - Update notices on systems without Omarchy.
+  - aarch64.
 
 ## Development
 
@@ -102,6 +173,8 @@ sudo pacman -S bats shellcheck
 make lint test
 make install-dev     # link ~/.local/bin/ghpkg to this checkout
 ```
+
+Releases: set the version in `lib/common.sh` and `packaging/PKGBUILD`, commit, and push a tag such as `v1.0.1`. GitHub Actions tests it, builds the package and publishes the release.
 
 The tests replace `curl`, `gh`, `sudo`, `pacman` and `makepkg` with stand-ins from `test/stubs`, so they never touch the network, sudo or your packages.
 

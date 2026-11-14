@@ -1,27 +1,21 @@
 # Maintainer: Abhay Kshatriya
-# Installs ghpkg itself as a pacman package, from a tagged release.
-# For a release: set pkgver, then run `updpkgsums` here.
+# Builds ghpkg's release package from this checkout. GitHub Actions runs it for
+# every version tag and attaches the result to the release, where ghpkg-gh
+# (packaging/ghpkg-gh) picks it up. By hand: cd packaging && makepkg
 
 pkgname=ghpkg
-pkgver=0.1.0
+pkgver=1.0.0
 pkgrel=1
 pkgdesc="Install apps from their GitHub releases as pacman packages, and keep them updated"
 arch=(any)
 url="https://github.com/kshatriya-abhay/ghpkg"
 license=(MIT)
-depends=(bash curl jq pacman pacman-contrib libarchive binutils sudo coreutils util-linux)
+depends=(bash curl jq pacman pacman-contrib libarchive binutils fakeroot sudo coreutils util-linux)
 optdepends=('github-cli: use your gh login for GitHub requests (5000 an hour instead of 60)')
-source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
-
-check() {
-  cd "$pkgname-$pkgver"
-  if command -v bats >/dev/null; then
-    make test
-  fi
-}
+install=ghpkg.install
+options=(!debug)
 
 package() {
-  cd "$pkgname-$pkgver"
+  cd "$startdir/.."
   make install DESTDIR="$pkgdir" PREFIX=/usr
 }

@@ -1,0 +1,44 @@
+name: Release
+
+# Push a tag such as v1.0.0 to publish that version. The release gets the
+# pacman package that ghpkg-gh installs; GitHub lists its sha256, which
+# `ghpkg update` checks every download against.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install tools
+        run: |
+          pacman -Syu --noconfirm --needed base-devel bats shellcheck jq curl \
+            libarchive pacman-contrib binutils git github-cli
+      - uses: actions/checkout@v4
+      - name: Make a build user
+        run: |
+          useradd -m builder
+          chown -R builder "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Check the tag matches the version
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          grep -qx "GHPKG_VERSION=$version" lib/common.sh ||
+            { echo "lib/common.sh has $(grep ^GHPKG_VERSION= lib/common.sh), but the tag is $GITHUB_REF_NAME"; exit 1; }
+          grep -qx "pkgver=$version" packaging/PKGBUILD ||
+            { echo "packaging/PKGBUILD has $(grep ^pkgver= packaging/PKGBUILD), but the tag is $GITHUB_REF_NAME"; exit 1; }
+      - name: Lint and test
+        run: su builder -c 'make lint test'
+      - name: Build the package
+        run: su builder -c 'cd packaging && PKGDEST=$PWD/out makepkg --nodeps --noconfirm'
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" packaging/out/ghpkg-*-any.pkg.tar.zst \
+            --title "ghpkg $GITHUB_REF_NAME" --generate-notes --verify-tag

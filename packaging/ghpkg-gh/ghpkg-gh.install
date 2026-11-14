@@ -1,0 +1,13 @@
+# Tips after installing ghpkg, the same as ghpkg.install in the release package.
+
+_ghpkg_tips() {
+  if command -v omarchy >/dev/null 2>&1 || [ -d /usr/share/omarchy ]; then
+    echo "ghpkg: on Omarchy, run 'ghpkg hook install' (as your user) to list ghpkg updates"
+    echo "       at the end of every omarchy update, or 'ghpkg hook install --update' to install them."
+  fi
+  echo "ghpkg: log in with 'gh auth login' for GitHub's 5000 requests an hour instead of 60."
+}
+
+post_install() {
+  _ghpkg_tips
+}

@@ -57,3 +57,27 @@ setup() {
   [[ -z $(asset_digest https://github.com/me/app/releases/download/v1.0/app-1.0.deb) ]]
   [[ -z $(asset_digest https://github.com/me/app/releases/download/v1.0/missing) ]]
 }
+
+@test "without a token, a tip about logging in is shown once per run" {
+  unset GHPKG_NO_TIPS
+  make_pkgbuild one-gh me/one 1.0
+  make_pkgbuild two-gh me/two 1.0
+  serve_release me/one v1.0
+  serve_release me/two v1.0
+  run ghpkg check-update
+  [[ $(grep -c "ghpkg tip: you aren't logged in to GitHub" <<<"$output") -eq 1 ]]
+  [[ $output == *"gh auth login"*"5000 an hour"* ]]
+}
+
+@test "with a token there's no tip, and GHPKG_NO_TIPS silences it" {
+  unset GHPKG_NO_TIPS
+  export GHPKG_TEST_GH_TOKEN=tok
+  serve_release me/app v1.0
+  make_pkgbuild app-gh me/app 1.0
+  run ghpkg check-update
+  [[ $output != *"ghpkg tip"* ]]
+  unset GHPKG_TEST_GH_TOKEN GITHUB_TOKEN
+  export GHPKG_NO_TIPS=1
+  run ghpkg check-update
+  [[ $output != *"ghpkg tip"* ]]
+}

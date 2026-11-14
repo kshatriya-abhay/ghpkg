@@ -37,12 +37,16 @@ Keeping packages updated:
   remove <package>      Uninstall a package, and optionally delete its PKGBUILD.
 
 Adding a package:
+  add <owner/repo>      Add an app whose release has a .pkg.tar.zst, asking at each step.
   inspect <owner/repo>  Show what a release offers, and which package names are free.
   describe <owner/repo> <file>
                         Download a release file and show what's inside it.
   test-build <package>  Build a package without installing it, and compare it with upstream.
   skill install|remove  Make the ghpkg skill available to coding agents, for .deb releases.
 
+Omarchy:
+  hook install [--update]
+                        After every omarchy update, list (or with --update, install) updates.
 
 Other:
   help [command]        Show help, for one command if given.
@@ -87,6 +91,17 @@ Uninstalls the package with pacman, then asks whether to delete its PKGBUILD
 folder too. Keeps the folder unless you say yes.
 EOF
       ;;
+    add) cat <<'EOF'
+Usage: ghpkg add <owner/repo or GitHub URL> [--file <release file>] [--name <package>]
+
+Adds an app whose latest release has a .pkg.tar.zst, asking you at each step:
+which file to use, the package name, the dependencies, and whether to keep any
+script that runs as root. Then writes the PKGBUILD, test-builds it, and offers
+to install it.
+
+For .deb releases, use a coding agent with the ghpkg skill (ghpkg skill install).
+EOF
+      ;;
     inspect) cat <<'EOF'
 Usage: ghpkg inspect <owner/repo or GitHub URL> [--json]
 
@@ -122,6 +137,16 @@ remove   Removes those links.
 path     Prints where the skill's files are.
 EOF
       ;;
+    hook) cat <<'EOF'
+Usage: ghpkg hook install [--update] | remove | status
+
+On Omarchy, runs ghpkg at the end of every `omarchy update`:
+install           list the packages that can be updated (it never installs)
+install --update  install the updates too; pacman still asks before changing anything
+remove            take the hook out again
+status            show which hook is installed
+EOF
+      ;;
     *) usage ;;
   esac
 }
@@ -142,9 +167,11 @@ case $cmd in
   update) require_system curl jq vercmp makepkg updpkgsums; update "$@" ;;
   list) require_system; list ;;
   remove) require_system; remove "$@" ;;
+  add) require_system curl jq vercmp makepkg fakeroot bsdtar readelf sha256sum; ensure_root; add "$@" ;;
   inspect) require_system curl jq; inspect "$@" ;;
   describe) require_system curl jq bsdtar readelf sha256sum; describe "$@" ;;
   test-build) require_system makepkg fakeroot bsdtar; test_build "$@" ;;
   skill) skill "$@" ;;
+  hook) hook "$@" ;;
   *) warn "unknown command '$cmd'"; usage >&2; exit 1 ;;
 esac

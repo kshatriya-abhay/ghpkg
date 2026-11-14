@@ -1,7 +1,7 @@
-# shellcheck shell=bash
+# shellcheck shell=bash disable=SC2034 # GHPKG_VERSION is read by bin/ghpkg
 # Settings and helpers every command uses. Safe to source on its own.
 
-GHPKG_VERSION=0.1.0
+GHPKG_VERSION=1.0.0
 
 # Where the PKGBUILDs live, and where downloads and builds go. Both can be
 # moved with environment variables.
@@ -9,6 +9,10 @@ GHPKG_ROOT=${GHPKG_ROOT:-${XDG_CONFIG_HOME:-$HOME/.config}/pkgbuilds}
 GHPKG_CACHE=${GHPKG_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/ghpkg}
 
 warn() { echo "ghpkg: $*" >&2; }
+
+# A suggestion, on stderr so it never mixes with output scripts read.
+# GHPKG_NO_TIPS=1 turns them off.
+tip() { [[ -n ${GHPKG_NO_TIPS:-} ]] || echo "ghpkg tip: $*" >&2; }
 die() { warn "$*"; exit 1; }
 
 # A green heading, as `omarchy update` prints them. Plain when not on a terminal.

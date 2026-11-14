@@ -1,0 +1,29 @@
+# ghpkg itself as a ghpkg package: repackages the release package that
+# GitHub Actions attaches to every ghpkg release, so `ghpkg update` keeps ghpkg
+# updated like any other package. install.sh copies this folder into
+# ~/.config/pkgbuilds/ghpkg-gh. Its pkgver starts at 0, so the first
+# `ghpkg update ghpkg-gh` sets the real version and checksum from GitHub.
+
+pkgname=ghpkg-gh
+_ghrepo=kshatriya-abhay/ghpkg
+pkgver=0
+pkgrel=1
+pkgdesc="Install apps from their GitHub releases as pacman packages, and keep them updated (from the upstream GitHub release)"
+arch=(x86_64)
+url="https://github.com/$_ghrepo"
+license=(MIT)
+depends=(bash curl jq pacman pacman-contrib libarchive binutils fakeroot sudo coreutils util-linux)
+optdepends=('github-cli: use your gh login for GitHub requests (5000 an hour instead of 60)')
+provides=(ghpkg)
+conflicts=(ghpkg)
+install=ghpkg-gh.install
+options=(!strip !debug)
+_file=ghpkg-$pkgver-1-any.pkg.tar.zst
+source=("$url/releases/download/v$pkgver/$_file")
+noextract=("$_file")
+sha256sums=('SKIP')
+
+package() {
+  bsdtar -xf "$srcdir/$_file" -C "$pkgdir" \
+    --exclude .PKGINFO --exclude .BUILDINFO --exclude .MTREE --exclude .INSTALL
+}
