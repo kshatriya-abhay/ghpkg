@@ -8,6 +8,8 @@ Many projects attach a ready-made `.pkg.tar.zst` or `.deb` to every GitHub relea
 - **GitHub releases only,** and prebuilt release files only.
 - **x86_64.**
 
+![ghpkg add storytold/pdfcraft: inspecting the release, choosing the name, dependencies and conflicts, saving the PKGBUILD, a test build, then installing with pacman](docs/ghpkg-add.gif)
+
 ## Install
 
 ```bash
