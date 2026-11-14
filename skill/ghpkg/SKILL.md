@@ -39,6 +39,8 @@ Read the one that matches the release file, plus `dependencies.md`, before writi
 1. **`ghpkg inspect <owner/repo>`.** It lists the release's Linux x86_64 files, best first, and says whether the official repos have the app, which names are taken on the AUR, and whether a PKGBUILD for it exists already.
    - **If the official repos have it:** tell the user and stop, unless they say otherwise. A repo package is better than any repack.
    - **If a PKGBUILD already uses this repo:** say so, and ask whether they want a second one.
+   - **If it says a package with the suggested name is installed already:** tell the user. It may come from another packages folder or an old install, and the new package would replace it.
+   - **Note the tag line** ("Download links use the tag …"): it says whether `source=` needs `v$pkgver` or `$pkgver`. Don't assume a `v`.
    - **If there's no `.pkg.tar.zst` or `.deb`:** stop. ghpkg doesn't package archives, AppImages or `.rpm` files yet.
 2. **Ask: which file, and which name.** Propose the best-ranked file and the suggested `<app>-gh` name. Ask only when there's a real choice: several files of the same kind, a `-gh` name that's taken, or an upstream name worth keeping.
 3. **`ghpkg describe <owner/repo> <file>`.** It downloads the file into the cache, checks it against GitHub's checksum, and reports the metadata, dependencies, scripts that run as root, files, linked libraries, the AUR packages that are this same app, and warnings. Add `--json` to read it as data.
@@ -48,7 +50,7 @@ Read the one that matches the release file, plus `dependencies.md`, before writi
 5. **Ask: the dependencies.** Follow `dependencies.md`. Show the table, wait for the answer, and use exactly what the user confirmed.
 6. **Ask: scripts that run as root, and layout fixes.** Print every script in full in your reply, plus the scripts it calls (describe includes them), with a short plain summary of what each does. Ask whether to carry them over as they are, change them, or stop. Then list each layout fix you propose (see `deb.md`) and ask yes or no for each.
 7. **Write the PKGBUILD** from the template, and the install file if one was agreed. Print the complete file in your reply, then ask before saving it to `~/.config/pkgbuilds/<name>/`.
-8. **`ghpkg test-build <name>`.** It builds without installing and compares the files with the release file. Show the user the result. If files differ, explain each difference.
+8. **`ghpkg test-build <name>`.** It builds without installing, compares the files and their permissions with the release file, and checks that each download link in `source=` is a file of the latest release. Show the user the result. If files differ, explain each difference. If it says a source link isn't a file of the release, fix `source=` and run it again: a build that passed from the cache proves nothing about the link.
 9. **Hand over.** Tell the user to run `ghpkg update <name>` in their own terminal. It needs sudo, so it fails without a terminal.
 
 ## Where you must stop and ask

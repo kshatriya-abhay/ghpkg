@@ -62,7 +62,7 @@ fetch_release() {
 asset_digest() {
   local digest
   digest=$(jq -r --arg url "$1" \
-    '.assets[] | select(.browser_download_url == $url) | .digest // empty' <<<"$RELEASE")
+    '.assets[] | select((.browser_download_url | ascii_downcase) == ($url | ascii_downcase)) | .digest // empty' <<<"$RELEASE")
   [[ $digest == sha256:* ]] && echo "${digest#sha256:}" || true
 }
 

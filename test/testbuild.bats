@@ -149,6 +149,25 @@ EOF
   [[ -f $BATS_TEST_TMPDIR/unpacked/meta/control/control ]]
 }
 
+@test "test-build checks the source links against the latest release" {
+  zst_pkgbuild
+  publish me/myapp v1.0 "$GHPKG_CACHE/sources/myapp-1.0-1-x86_64.pkg.tar.zst"
+  run ghpkg test-build myapp-gh
+  [[ $status -eq 0 ]]
+  [[ $output == *"Source links: all are files of the v1.0 release."* ]]
+}
+
+@test "a source link the release doesn't have fails, even when the build passed from the cache" {
+  zst_pkgbuild
+  # The tag has no "v", but the PKGBUILD writes v$pkgver.
+  publish me/myapp 1.0 "$GHPKG_CACHE/sources/myapp-1.0-1-x86_64.pkg.tar.zst"
+  run ghpkg test-build myapp-gh
+  [[ $status -eq 1 ]]
+  [[ $output == *"Files: the same 3 files"* ]]
+  [[ $output == *"Source link isn't a file of the 1.0 release: https://github.com/me/myapp/releases/download/v1.0/myapp-1.0-1-x86_64.pkg.tar.zst"* ]]
+  [[ $output == *"The release has that file at https://github.com/me/myapp/releases/download/1.0/myapp-1.0-1-x86_64.pkg.tar.zst"* ]]
+}
+
 @test "a failed build shows the end of makepkg's log" {
   zst_pkgbuild
   sed -i "s/^sha256sums=.*/sha256sums=('0000')/" "$GHPKG_ROOT/myapp-gh/PKGBUILD"

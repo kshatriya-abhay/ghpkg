@@ -30,7 +30,7 @@ Start from `templates/PKGBUILD.zst` and replace each `@…@` placeholder:
 | `@LICENSE@`, `@DEPENDS@`, `@OPTDEPENDS@`, `@PROVIDES@`, `@CONFLICTS@` | The items, each in single quotes, separated by spaces |
 | `@INSTALL@` | `<pkgname>.install` if an install file was agreed; otherwise delete that line |
 | `@FILE@` | The release file name with `$pkgver` in place of the version, in double quotes |
-| `@SOURCE@` | `"$url/releases/download/v$pkgver/$_file"` (drop the `v` if the tag has none) |
+| `@SOURCE@` | `"$url/releases/download/v$pkgver/$_file"`, with the tag written the way `inspect`'s "Download links use the tag" line says: `v$pkgver` or `$pkgver` |
 | `@SHA256@` | The sha256 from `describe` |
 
 If the file name has no version in it, set `_file="<pkgname>-$pkgver.pkg.tar.zst"` and write the source as `"$_file::$url/releases/download/v$pkgver/<real file name>"`.

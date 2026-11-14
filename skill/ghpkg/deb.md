@@ -18,7 +18,9 @@ scripts, and fixing the layout.
 ## The PKGBUILD
 
 Start from `templates/PKGBUILD.deb`. The placeholders are the same as in
-`zst.md`, except there's no `_file`: the source is the `.deb` itself.
+`zst.md`, except there's no `_file`: the source is the `.deb` itself. Write
+the tag in the link the way `inspect`'s "Download links use the tag" line
+says (`v$pkgver` in these examples).
 
 ```bash
 source=("$url/releases/download/v$pkgver/myapp_${pkgver}_amd64.deb")

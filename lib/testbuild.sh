@@ -24,6 +24,46 @@ changed_modes() {
     awk -F '\t' '$2 != $3'
 }
 
+# Checks that each GitHub download in the PKGBUILD is a file of the latest
+# release, when the PKGBUILD is at that release's version. makepkg can't
+# notice a wrong link, such as a "v" the tag doesn't have, when the file is in
+# the cache already; the first `ghpkg update` would fail instead.
+# Returns 1 when a link is wrong.
+check_release_sources() {
+  local pkg=$1 repo src url tag prefix bad=false name actual
+  repo=$(pkgvar "$pkg" _ghrepo)
+  [[ -n $repo ]] || return 0
+  if ! fetch_release "$repo"; then
+    echo "Source links: not checked, because the latest release couldn't be read ($GH_ERROR)."
+    return 0
+  fi
+  tag=$(jq -r .tag_name <<<"$RELEASE")
+  if [[ $(tag_to_pkgver "$tag" || true) != "$(pkgvar "$pkg" pkgver)" ]]; then
+    echo "Source links: not checked, because pkgver isn't the latest release ($tag)."
+    return 0
+  fi
+  prefix="https://github.com/${repo,,}/releases/download/"
+  while IFS= read -r src; do
+    url=$(source_url "$src")
+    [[ ${url,,} == "$prefix"* ]] || continue
+    jq -e --arg u "${url,,}" 'any(.assets[]; (.browser_download_url | ascii_downcase) == $u)' <<<"$RELEASE" >/dev/null && continue
+    bad=true
+    name=${url##*/}
+    echo "Source link isn't a file of the $tag release: $url"
+    actual=$(jq -r --arg n "$name" '.assets[] | select(.name == $n) | .browser_download_url' <<<"$RELEASE")
+    if [[ -n $actual ]]; then
+      echo "  The release has that file at $actual: check how the tag is written in source=."
+    else
+      echo "  The release has no file named $name."
+    fi
+  done < <(pkgvar "$pkg" source)
+  if $bad; then
+    echo "  The build only passed because the file was in the cache already. 'ghpkg update' would fail to download it."
+    return 1
+  fi
+  echo "Source links: all are files of the $tag release."
+}
+
 test_build() {
   (( $# == 1 )) || die "usage: ghpkg test-build <package>"
   local pkg=$1 dir log status=0 built original src missing
@@ -93,4 +133,6 @@ test_build() {
       awk -F '\t' '{ printf "  /%s: %s in the release file, %s in the build\n", $1, $2, $3 }' <<<"$modes" | head -40
     fi
   fi
+  echo
+  check_release_sources "$pkg"
 }

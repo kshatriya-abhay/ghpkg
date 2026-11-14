@@ -127,7 +127,7 @@ local_pkgs_for() {
 }
 
 inspect_json() {
-  local repo=$1 info name tag version
+  local repo=$1 info name tag version installed
   gh_get "$GITHUB_API/repos/$repo" || die "$repo: $GH_ERROR"
   info=$GH_BODY
   fetch_release "$repo" || die "$repo has no usable release: $GH_ERROR"
@@ -135,6 +135,8 @@ inspect_json() {
   name=$(jq -r '.name | ascii_downcase' <<<"$info")
   tag=$(jq -r .tag_name <<<"$RELEASE")
   version=$(tag_to_pkgver "$tag") || version=
+  # A package with the suggested name may be installed without a PKGBUILD here.
+  installed=$(pacman -Q "$name-gh" 2>/dev/null | awk '{print $2}') || installed=
 
   jq -n \
     --arg repo "$repo" \
@@ -145,13 +147,18 @@ inspect_json() {
     --argjson official "$(official_json "$name")" \
     --argjson aur "$(aur_names_json "$name" "$name-bin" "$name-git" "$name-gh")" \
     --argjson local "$(local_pkgs_for "$repo" | jq -R . | jq -s .)" \
-    --arg suggested "$name-gh" \
+    --arg suggested "$name-gh" --arg installed "$installed" \
     '{repo: $repo, name: ($info.name | ascii_downcase), description: $info.description,
       license: $info.license.spdx_id,
       release: {tag: $release.tag_name, version: (if $version == "" then null else $version end),
-                published: $release.published_at, prerelease: $release.prerelease},
+                published: $release.published_at, prerelease: $release.prerelease,
+                tag_in_source: (if $version == "" then null
+                                elif $release.tag_name == $version then "$pkgver"
+                                elif $release.tag_name == "v" + $version then "v$pkgver"
+                                else null end)},
       files: $files, official: $official, aur: $aur, local: $local,
-      suggested_name: $suggested}'
+      suggested_name: $suggested,
+      suggested_installed: (if $installed == "" then null else $installed end)}'
 }
 
 inspect() {
@@ -198,6 +205,11 @@ print_inspection() {
      else "AUR: " + ([.aur | to_entries[] | "\(.key) \(if .value then "taken" else "free" end)"] | join(", ")) end),
     (if (.local | length) > 0 then "Already set up as: \(.local | join(", "))."
      else "Not set up in your packages yet." end),
+    (if .suggested_installed and (.suggested_name as $n | .local | index($n) | not)
+     then "But \(.suggested_name) \(.suggested_installed) is installed: from another packages folder, or by hand. Check before using that name."
+     else empty end),
+    (if .release.tag_in_source then "Download links use the tag \(.release.tag): write it in source= as \(.release.tag_in_source)."
+     else empty end),
     "",
     (if .official then empty
      elif .aur != null and .aur[.suggested_name] then "Suggested name \(.suggested_name) is taken on the AUR: pick another."

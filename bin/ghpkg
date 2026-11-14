@@ -126,7 +126,9 @@ Usage: ghpkg test-build <package>
 
 Builds the package in the cache without installing it or checking its
 dependencies, then shows the result and compares its files, and their
-permissions, with the release file it came from.
+permissions, with the release file it came from. Also checks that each
+download link in source= is a file of the latest release: a wrong link can
+build from the cache but would fail at the next update. Exits 1 if one isn't.
 EOF
       ;;
     skill) cat <<'EOF'

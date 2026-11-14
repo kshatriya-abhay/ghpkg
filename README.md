@@ -35,7 +35,7 @@ To install from the checkout without pacman tracking it, `make install` copies g
 | `ghpkg add <owner/repo>` | Adds an app whose release has a `.pkg.tar.zst`, asking you at each step (below). |
 | `ghpkg inspect <owner/repo>` | Shows the latest release's Linux x86_64 files, best first, whether the official repos have the app, and which names are taken on the AUR. |
 | `ghpkg describe <owner/repo> <file>` | Downloads a `.pkg.tar.zst` or `.deb` from the release, checks it against GitHub's checksum, and shows what's inside: dependencies, scripts that run as root, files, linked libraries, the AUR packages that are this same app, and what needs a decision, such as dependencies the official repos don't have. Runs nothing from the package. |
-| `ghpkg test-build <package>` | Builds a package without installing it, and compares its files and their permissions with the release file. |
+| `ghpkg test-build <package>` | Builds a package without installing it, compares its files and their permissions with the release file, and checks that its download links are files of the latest release. |
 | `ghpkg skill install` | Links the ghpkg skill into your coding agents' skill folders (below). |
 | `ghpkg hook install [--update]` | On Omarchy, runs ghpkg after every `omarchy update` (below). |
 | `ghpkg help [command]` | Shows help. |

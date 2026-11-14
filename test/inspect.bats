@@ -99,3 +99,22 @@ setup() {
   run inspect me/nothing
   [[ $status -eq 1 && $output == *"me/nothing: not found on GitHub"* ]]
 }
+
+@test "inspect says how to write the tag in source=" {
+  serve_release me/myapp v1.0 myapp-1.0-1-x86_64.pkg.tar.zst cafe01
+  run inspect me/myapp
+  [[ $output == *'Download links use the tag v1.0: write it in source= as v$pkgver.'* ]]
+  serve_release me/myapp 1.0 myapp-1.0-1-x86_64.pkg.tar.zst cafe01
+  run inspect me/myapp
+  [[ $output == *'Download links use the tag 1.0: write it in source= as $pkgver.'* ]]
+}
+
+@test "inspect warns when a package with the suggested name is installed without a PKGBUILD here" {
+  serve_release me/myapp v1.0 myapp-1.0-1-x86_64.pkg.tar.zst cafe01
+  installed myapp-gh 0.9-1
+  run inspect me/myapp
+  [[ $output == *"But myapp-gh 0.9-1 is installed"* ]]
+  make_pkgbuild myapp-gh me/myapp 0.9
+  run inspect me/myapp
+  [[ $output != *"But myapp-gh"* ]]
+}
