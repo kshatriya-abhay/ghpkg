@@ -1,0 +1,40 @@
+#!/bin/bash
+# Test stand-in for curl. Answers from files that test/helpers.bash's `serve`
+# writes, and logs each request (URL and headers) to $GHPKG_TEST_LOG/curl.
+set -euo pipefail
+
+url= out= write= fail=false headers=()
+while (( $# )); do
+  case $1 in
+    -o) out=$2; shift ;;
+    -w) write=$2; shift ;;
+    -H) headers+=("$2"); shift ;;
+    --max-time | --connect-timeout | --retry | --retry-delay) shift ;;
+    --*) ;;
+    -*) [[ $1 == *f* ]] && fail=true ;;
+    *) url=$1 ;;
+  esac
+  shift
+done
+
+printf '%s %s\n' "$url" "${headers[*]}" >>"$GHPKG_TEST_LOG/curl"
+[[ -z ${GHPKG_TEST_OFFLINE:-} ]] || exit 6
+
+key=$(printf '%s' "$url" | sha256sum | cut -c1-16)
+if [[ -f $GHPKG_TEST_HTTP/$key.body ]]; then
+  code=$(<"$GHPKG_TEST_HTTP/$key.code")
+  body=$GHPKG_TEST_HTTP/$key.body
+else
+  code=404
+  body=$GHPKG_TEST_HTTP/not-found.body
+  printf '{"message":"Not Found"}' >"$body"
+fi
+
+$fail && (( code >= 400 )) && exit 22
+
+if [[ -n $out ]]; then
+  cp "$body" "$out"
+else
+  cat "$body"
+fi
+[[ -z $write ]] || printf "${write//%\{http_code\}/$code}"

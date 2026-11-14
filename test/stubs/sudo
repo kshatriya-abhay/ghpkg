@@ -1,0 +1,11 @@
+#!/bin/bash
+# Test stand-in for sudo. `sudo -n true` succeeds only when GHPKG_TEST_SUDO=ok,
+# as if a password were cached. Anything else is logged and run as is.
+set -euo pipefail
+
+if [[ ${1:-} == -n ]]; then
+  [[ ${GHPKG_TEST_SUDO:-} == ok ]]
+  exit
+fi
+echo "sudo $*" >>"$GHPKG_TEST_LOG/sudo"
+exec "$@"

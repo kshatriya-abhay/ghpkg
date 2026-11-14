@@ -1,213 +1,103 @@
 #!/bin/bash
 
-# Keeps the packages in ~/.config/pkgbuilds in step with their GitHub releases.
-#
-#   ghpkg check-update            List packages with a newer release. Changes nothing.
-#   ghpkg update [pkgname...]     Bump the PKGBUILD, build and install with pacman.
-#                                 With no names: every installed package that needs it.
-#                                 Name a package that isn't installed yet to install it.
-#
-# Each <pkgname>/PKGBUILD sets _ghrepo=owner/repo, and the latest release's tag
-# (minus a leading "v") is its pkgver. Checksums come from GitHub when the release
-# lists them. Downloads and builds go to ~/.cache/ghpkg, so this folder only ever
-# holds PKGBUILDs. Release checks use GITHUB_TOKEN, or else the `gh` login's token,
-# which lifts GitHub's limit of 60 checks an hour to 5000.
+# ghpkg: installs apps from their GitHub releases as pacman packages, and keeps
+# them updated. For Arch Linux and Arch-based systems.
 
 set -euo pipefail
 
-ROOT=${GHPKG_ROOT:-$HOME/.config/pkgbuilds}
-CACHE=${XDG_CACHE_HOME:-$HOME/.cache}/ghpkg
-export BUILDDIR=$CACHE/build SRCDEST=$CACHE/sources PKGDEST=$CACHE/packages
-: "${GITHUB_TOKEN:=$(gh auth token 2>/dev/null || true)}"
+# Installed, the code is in <prefix>/lib/ghpkg and the data in
+# <prefix>/share/ghpkg. In the repo, both sit next to bin/.
+_self=$(readlink -f "${BASH_SOURCE[0]}")
+_prefix=${_self%/bin/*}
+if [[ -f $_prefix/lib/ghpkg/common.sh ]]; then
+  GHPKG_LIB=$_prefix/lib/ghpkg
+  GHPKG_SHARE=$_prefix/share/ghpkg
+else
+  GHPKG_LIB=$_prefix/lib
+  GHPKG_SHARE=$_prefix
+fi
+export GHPKG_SHARE
 
-warn() { echo "ghpkg: $*" >&2; }
-die() { warn "$*"; exit 1; }
+for _lib in "$GHPKG_LIB"/*.sh; do
+  # shellcheck disable=SC1090
+  source "$_lib"
+done
 
 usage() {
-  sed -n '3,9s/^# \{0,1\}//p' "$(readlink -f "$0")"
-  exit "${1:-0}"
+  cat <<'EOF'
+Usage: ghpkg <command> [arguments]
+
+Installs apps from their GitHub releases as pacman packages, and keeps them
+updated. Each package is a PKGBUILD in ~/.config/pkgbuilds/<name>/.
+
+Keeping packages updated:
+  check-update          List every package and whether it can be updated. Changes nothing.
+  update [package...]   Update to the latest release: edit the PKGBUILD, build, install.
+  list                  List the packages, their versions and GitHub repos. Offline.
+  remove <package>      Uninstall a package, and optionally delete its PKGBUILD.
+
+Other:
+  help [command]        Show help, for one command if given.
+  --version             Show the version.
+
+Run 'ghpkg help <command>' for details.
+EOF
 }
 
-all_pkgs() {
-  local f
-  for f in "$ROOT"/*/PKGBUILD; do
-    [[ -f $f ]] || continue
-    f=${f%/PKGBUILD}
-    echo "${f##*/}"
-  done
+command_help() {
+  case $1 in
+    check-update) cat <<'EOF'
+Usage: ghpkg check-update
+
+Asks GitHub for each package's latest release and lists every package with
+its state: up to date, can be updated, or not installed. Ends with a summary
+line. Changes nothing. Exits 1 if a package couldn't be checked.
+EOF
+      ;;
+    update) cat <<'EOF'
+Usage: ghpkg update [package...]
+
+For each package with a newer release: sets the PKGBUILD's pkgver, takes the
+checksums from GitHub (or hashes the download when GitHub lists none), then
+builds and installs it with makepkg -si. pacman asks before changing anything.
+
+With no names it updates every installed package. Name a package that isn't
+installed yet to install it. Needs a terminal, because sudo asks for a password.
+EOF
+      ;;
+    list) cat <<'EOF'
+Usage: ghpkg list
+
+Lists every package with its installed version, its PKGBUILD's version and
+its GitHub repo. Doesn't ask GitHub anything, so it works offline.
+EOF
+      ;;
+    remove) cat <<'EOF'
+Usage: ghpkg remove <package>
+
+Uninstalls the package with pacman, then asks whether to delete its PKGBUILD
+folder too. Keeps the folder unless you say yes.
+EOF
+      ;;
+    *) usage ;;
+  esac
 }
 
-# A PKGBUILD variable or array, read the way makepkg reads it.
-pkgvar() {
-  (
-    source "$ROOT/$1/PKGBUILD"
-    eval "printf '%s\n' \"\${$2[@]}\""
-  )
-}
+cmd=${1:-}
+(( $# )) && shift
 
-release_json() {
-  local auth=()
-  [[ -z $GITHUB_TOKEN ]] || auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
-  curl -fsSL --max-time 30 "${auth[@]}" -H 'Accept: application/vnd.github+json' \
-    "https://api.github.com/repos/$1/releases/latest"
-}
+case $cmd in
+  '' | -h | --help) usage; exit 0 ;;
+  help) command_help "${1:-}"; exit 0 ;;
+  --version | version) echo "ghpkg $GHPKG_VERSION"; exit 0 ;;
+esac
 
-# Works out what a package needs. Sets STATE to one of:
-#   release  GitHub has a newer version than the PKGBUILD
-#   install  the PKGBUILD is newer than what's installed (a build that didn't finish)
-#   missing  not installed
-#   ok       nothing to do
-plan() {
-  local pkg=$1 tag
-  REPO=$(pkgvar "$pkg" _ghrepo)
-  PKGVER=$(pkgvar "$pkg" pkgver)
-  CURRENT=$PKGVER-$(pkgvar "$pkg" pkgrel)
-  INSTALLED=$(pacman -Q "$pkg" 2>/dev/null | awk '{print $2}') || INSTALLED=
+(( EUID != 0 )) || die "run ghpkg as your user, not root. It asks for sudo itself when installing."
 
-  RELEASE=$(release_json "$REPO") || return 1
-  tag=$(jq -r '.tag_name // empty' <<<"$RELEASE")
-  [[ -n $tag ]] || return 1
-  LATEST=${tag#v}
-
-  if (( $(vercmp "$LATEST" "$PKGVER") > 0 )); then
-    STATE=release
-  elif [[ -z $INSTALLED ]]; then
-    STATE=missing
-  elif (( $(vercmp "$CURRENT" "$INSTALLED") > 0 )); then
-    STATE=install
-  else
-    STATE=ok
-  fi
-}
-
-check_update() {
-  local pkg total=0 updatable=0 current=0 missing=0 failed=0 summary
-
-  for pkg in $(all_pkgs); do
-    total=$((total + 1))
-    if ! plan "$pkg"; then
-      warn "$pkg: couldn't read the latest release of $REPO"
-      failed=$((failed + 1))
-      continue
-    fi
-
-    case $STATE in
-      release) echo "$pkg ${INSTALLED:-$CURRENT} -> $LATEST"; updatable=$((updatable + 1)) ;;
-      install) echo "$pkg $INSTALLED -> $CURRENT (built but not installed yet)"; updatable=$((updatable + 1)) ;;
-      missing) echo "$pkg $CURRENT (not installed)"; missing=$((missing + 1)) ;;
-      ok) echo "$pkg $CURRENT (up to date)"; current=$((current + 1)) ;;
-    esac
-  done
-
-  summary="ghpkg: $updatable packages can be updated. $current/$total packages up-to-date."
-  (( missing == 0 )) || summary+=" $missing not installed."
-  (( failed == 0 )) || summary+=" $failed couldn't be checked."
-  echo "$summary"
-  (( updatable == 0 )) || echo 'run `ghpkg update`'
-
-  (( failed == 0 ))
-}
-
-# Points the PKGBUILD at the latest release and fills in its checksums.
-bump() {
-  local pkg=$1 file=$ROOT/$1/PKGBUILD src url digest sums=() unverified=false
-
-  sed -i -e "s/^pkgver=.*/pkgver=$LATEST/" -e "s/^pkgrel=.*/pkgrel=1/" "$file"
-
-  while IFS= read -r src; do
-    url=${src#*::}
-    digest=$(jq -r --arg url "$url" \
-      '.assets[] | select(.browser_download_url == $url) | .digest // empty' <<<"$RELEASE")
-    if [[ $digest == sha256:* ]]; then
-      sums+=("'${digest#sha256:}'")
-    else
-      unverified=true
-    fi
-  done < <(pkgvar "$pkg" source)
-
-  if $unverified; then
-    warn "$pkg: GitHub lists no checksum for this release, so it can't be verified. Using the hash of the download."
-    (cd "$ROOT/$pkg" && updpkgsums)
-  else
-    sed -i "s/^sha256sums=.*/sha256sums=(${sums[*]})/" "$file"
-  fi
-}
-
-# Builds and installs, then drops the downloads. PKGDEST keeps the new package and
-# the one it replaced, for going back with pacman -U.
-build_install() {
-  local pkg=$1 src
-
-  find "$PKGDEST" -maxdepth 1 -name "$pkg-*.pkg.tar.*" ! -name "$pkg-${INSTALLED:-none}-*" -delete
-  (cd "$ROOT/$pkg" && makepkg --syncdeps --install --force --cleanbuild --clean) || return 1
-
-  while IFS= read -r src; do
-    [[ $src == *::* ]] && src=${src%%::*} || src=${src##*/}
-    rm -f "$SRCDEST/$src"
-  done < <(pkgvar "$pkg" source)
-}
-
-update() {
-  local pkg targets=() done=() failed=()
-
-  if (( $# )); then
-    for pkg; do
-      [[ -f $ROOT/$pkg/PKGBUILD ]] || die "no PKGBUILD for $pkg in $ROOT"
-      targets+=("$pkg")
-    done
-  else
-    for pkg in $(all_pkgs); do
-      pacman -Q "$pkg" &>/dev/null && targets+=("$pkg")
-    done
-  fi
-
-  # makepkg installs with sudo at the end. Without a terminal (as from a
-  # non-interactive shell) sudo can't ask for the password, so stop now
-  # rather than after the download and build.
-  if ! sudo -n true 2>/dev/null && [[ ! -t 0 ]]; then
-    die "sudo needs a password and there's no terminal to ask in. Run 'ghpkg update' in a terminal."
-  fi
-
-  mkdir -p "$BUILDDIR" "$SRCDEST" "$PKGDEST"
-
-  for pkg in "${targets[@]}"; do
-    if ! plan "$pkg"; then
-      warn "$pkg: couldn't read the latest release of $REPO"
-      failed+=("$pkg")
-      continue
-    fi
-
-    [[ $STATE != ok ]] || { echo "$pkg $CURRENT is up to date"; continue; }
-
-    echo -e "\e[32m\n$pkg: ${INSTALLED:-not installed} -> $( [[ $STATE == release ]] && echo "$LATEST" || echo "$CURRENT")\e[0m"
-    local bumped=false
-    if [[ $STATE == release ]]; then
-      bump "$pkg" || { failed+=("$pkg"); continue; }
-      CURRENT=$LATEST-1
-      bumped=true
-    fi
-
-    if build_install "$pkg"; then
-      done+=("$pkg")
-    elif $bumped; then
-      warn "$pkg: build or install failed. Its PKGBUILD now says $CURRENT; run 'ghpkg update $pkg' to retry."
-      failed+=("$pkg")
-    else
-      warn "$pkg: build or install failed. Run 'ghpkg update $pkg' to retry."
-      failed+=("$pkg")
-    fi
-  done
-
-  echo
-  (( ${#done[@]} == 0 )) || echo "Updated: ${done[*]}"
-  (( ${#failed[@]} == 0 )) || { echo "Failed: ${failed[*]}"; return 1; }
-}
-
-(( EUID != 0 )) || die "run as your user, not root (makepkg asks for sudo itself)"
-
-case ${1:-} in
-  check-update) shift; check_update "$@" ;;
-  update) shift; update "$@" ;;
-  -h | --help | help) usage ;;
-  *) usage 1 >&2 ;;
+case $cmd in
+  check-update) require_system curl jq vercmp; check_update "$@" ;;
+  update) require_system curl jq vercmp makepkg updpkgsums; update "$@" ;;
+  list) require_system; list ;;
+  remove) require_system; remove "$@" ;;
+  *) warn "unknown command '$cmd'"; usage >&2; exit 1 ;;
 esac

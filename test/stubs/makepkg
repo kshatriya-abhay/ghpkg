@@ -1,0 +1,19 @@
+#!/bin/bash
+# Test stand-in for makepkg, for update tests. Logs its arguments, writes an
+# empty package into $PKGDEST, and with --install records the package as
+# installed. Fails when GHPKG_TEST_MAKEPKG_FAIL is set.
+set -euo pipefail
+
+echo "makepkg $*" >>"$GHPKG_TEST_LOG/makepkg"
+[[ -z ${GHPKG_TEST_MAKEPKG_FAIL:-} ]] || exit 1
+
+# shellcheck disable=SC1091
+source ./PKGBUILD
+# shellcheck disable=SC2154 # set by the PKGBUILD
+version=$pkgver-$pkgrel
+: >"$PKGDEST/$pkgname-$version-x86_64.pkg.tar.zst"
+
+if [[ " $* " == *" --install "* ]]; then
+  sed -i "/^$pkgname /d" "$GHPKG_TEST_DB/installed"
+  echo "$pkgname $version" >>"$GHPKG_TEST_DB/installed"
+fi

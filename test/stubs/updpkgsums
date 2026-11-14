@@ -1,0 +1,5 @@
+#!/bin/bash
+# Test stand-in for updpkgsums: writes a recognisable checksum and logs the call.
+set -euo pipefail
+echo "updpkgsums $PWD" >>"$GHPKG_TEST_LOG/updpkgsums"
+sed -i "s/^sha256sums=.*/sha256sums=('hash-of-the-download')/" PKGBUILD

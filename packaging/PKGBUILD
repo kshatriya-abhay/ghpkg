@@ -1,0 +1,27 @@
+# Maintainer: Abhay Kshatriya
+# Installs ghpkg itself as a pacman package, from a tagged release.
+# For a release: set pkgver, then run `updpkgsums` here.
+
+pkgname=ghpkg
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Install apps from their GitHub releases as pacman packages, and keep them updated"
+arch=(any)
+url="https://github.com/kshatriya-abhay/ghpkg"
+license=(MIT)
+depends=(bash curl jq pacman pacman-contrib libarchive binutils sudo coreutils util-linux)
+optdepends=('github-cli: use your gh login for GitHub requests (5000 an hour instead of 60)')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+check() {
+  cd "$pkgname-$pkgver"
+  if command -v bats >/dev/null; then
+    make test
+  fi
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  make install DESTDIR="$pkgdir" PREFIX=/usr
+}

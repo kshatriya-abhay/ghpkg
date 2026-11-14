@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install tools
+        run: |
+          pacman -Syu --noconfirm --needed base-devel bats shellcheck jq curl \
+            libarchive pacman-contrib binutils git
+      - uses: actions/checkout@v4
+      # makepkg refuses to run as root, and some tests run the real makepkg.
+      - name: Make a build user
+        run: |
+          useradd -m builder
+          chown -R builder "$GITHUB_WORKSPACE"
+      - name: Lint
+        run: su builder -c 'make lint'
+      - name: Test
+        run: su builder -c 'make test'

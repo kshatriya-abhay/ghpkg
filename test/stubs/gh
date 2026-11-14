@@ -1,0 +1,6 @@
+#!/bin/bash
+# Test stand-in for the GitHub CLI: `gh auth token` prints $GHPKG_TEST_GH_TOKEN,
+# or fails when it's empty, as when nobody is logged in.
+set -euo pipefail
+[[ "$*" == "auth token" && -n ${GHPKG_TEST_GH_TOKEN:-} ]] || exit 1
+echo "$GHPKG_TEST_GH_TOKEN"

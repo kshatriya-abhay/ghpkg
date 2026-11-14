@@ -1,0 +1,42 @@
+#!/bin/bash
+# Test stand-in for pacman, backed by plain files in $GHPKG_TEST_DB:
+#   installed  "name version" for each installed package
+#   repo       "repository name version" for the official repos
+#   owners     "path package" for pacman -Qo
+# Changes (-R, -U) are logged to $GHPKG_TEST_LOG/pacman.
+set -euo pipefail
+db=$GHPKG_TEST_DB
+
+case $1 in
+  -Q)
+    line=$(grep -m1 "^$2 " "$db/installed") || exit 1
+    echo "$line"
+    ;;
+  -Si)
+    line=$(grep -m1 " $2 " "$db/repo") || { echo "error: package '$2' was not found" >&2; exit 1; }
+    read -r repo name version <<<"$line"
+    printf 'Repository      : %s\nName            : %s\nVersion         : %s\n' "$repo" "$name" "$version"
+    ;;
+  -Qoq)
+    shift
+    for path; do
+      line=$(grep -m1 "^$path " "$db/owners") || { echo "error: No package owns $path" >&2; exit 1; }
+      echo "${line##* }"
+    done
+    ;;
+  -T)
+    shift
+    status=0
+    for dep; do
+      grep -q "^${dep%%[<>=]*} " "$db/installed" || { echo "$dep"; status=127; }
+    done
+    exit $status
+    ;;
+  -R)
+    echo "pacman $*" >>"$GHPKG_TEST_LOG/pacman"
+    sed -i "/^$2 /d" "$db/installed"
+    ;;
+  *)
+    echo "pacman $*" >>"$GHPKG_TEST_LOG/pacman"
+    ;;
+esac

@@ -1,0 +1,5 @@
+# A manual makepkg in packaging/ leaves these behind.
+packaging/src/
+packaging/pkg/
+packaging/*.tar.gz
+*.pkg.tar.*
