@@ -87,9 +87,14 @@ pkgbuild() { cat "$GHPKG_ROOT/$1/PKGBUILD"; }
 
   run ghpkg update </dev/null
   [[ $status -eq 1 ]]
-  [[ $output == *"no terminal to ask in"* ]]
+  [[ $output == *"no terminal to ask in. Run 'ghpkg update' in a terminal."* ]]
   grep -qx 'pkgver=1.0' "$GHPKG_ROOT/app-gh/PKGBUILD"
   [[ ! -s $GHPKG_TEST_LOG/makepkg ]]
+
+  # Named packages are repeated in the command to run.
+  run ghpkg update app-gh </dev/null
+  [[ $status -eq 1 ]]
+  [[ $output == *"Run 'ghpkg update app-gh' in a terminal."* ]]
 }
 
 @test "without a terminal, an up-to-date run still succeeds" {

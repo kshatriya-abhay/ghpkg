@@ -145,7 +145,7 @@ ghpkg hook status             # which one is installed
 ghpkg hook remove
 ```
 
-`install.sh` offers the first one.
+`install.sh` offers the first one. When `ghpkg update` updates ghpkg itself and the installed hook came with an older version, it offers to replace the hook with the new one.
 
 ## Roadmap
 

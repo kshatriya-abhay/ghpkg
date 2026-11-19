@@ -57,3 +57,27 @@ hook() {
       ;;
   esac
 }
+
+# After ghpkg has updated itself: an installed hook that differs from the new
+# copy came with an older ghpkg. Offers to replace it with the same kind of
+# hook; without a terminal, says how.
+refresh_stale_hook() {
+  local dir src name flag
+  dir=$(omarchy_hook_dir)
+  src=$GHPKG_SHARE/integrations/omarchy
+  for name in ghpkg-check-update.hook ghpkg-update.hook; do
+    [[ -f $dir/$name && -f $src/$name ]] || continue
+    cmp -s "$dir/$name" "$src/$name" && return 0
+    flag=
+    [[ $name == ghpkg-update.hook ]] && flag=' --update'
+    echo
+    if [[ -t 0 ]] && confirm "Your Omarchy hook, $dir/$name, came with an older ghpkg. Update it to this version's?" y; then
+      install -m755 "$src/$name" "$dir/$name"
+      echo "Updated $dir/$name."
+    else
+      echo "Your Omarchy hook, $dir/$name, came with an older ghpkg. Update it with: ghpkg hook install$flag"
+    fi
+    return 0
+  done
+  return 0
+}

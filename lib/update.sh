@@ -81,7 +81,7 @@ update() {
 
     # Before the first change: the PKGBUILD is about to be edited and the
     # install needs sudo.
-    $checked_sudo || { require_sudo_terminal update; checked_sudo=true; }
+    $checked_sudo || { require_sudo_terminal "update${*:+ $*}"; checked_sudo=true; }
 
     heading "$pkg: ${INSTALLED:-not installed} -> $([[ $STATE == release ]] && echo "$LATEST" || echo "$CURRENT")"
     bumped=false
@@ -104,6 +104,12 @@ update() {
 
   echo
   (( ${#done[@]} == 0 )) || echo "Updated: ${done[*]}"
+  # When ghpkg just updated itself, its Omarchy hook may be out of date too.
+  local self
+  self=$(pacman -Qoq "$GHPKG_SHARE/integrations/omarchy/ghpkg-update.hook" 2>/dev/null) || self=
+  if [[ -n $self ]] && printf '%s\n' "${done[@]}" | grep -qxF "$self"; then
+    refresh_stale_hook
+  fi
   (( ${#failed[@]} == 0 )) || { echo "Failed: ${failed[*]}"; return 1; }
 }
 
