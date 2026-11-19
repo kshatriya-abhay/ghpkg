@@ -49,7 +49,7 @@ $ ghpkg check-update
 nbfc-linux-gh 0.5.4-1 (up to date)
 photocraft-gh 0.23.0-1 -> 0.23.1
 stremio-service-gh 0.1.22-1 (up to date)
-ghpkg: 1 packages can be updated. 2/3 packages up-to-date.
+ghpkg: 1 package can be updated. 2/3 packages up-to-date.
 run `ghpkg update`
 ```
 

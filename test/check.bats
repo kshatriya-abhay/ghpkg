@@ -20,7 +20,7 @@ setup() { setup_ghpkg; }
   [[ ${lines[0]} == "absent-gh 3.0-1 (not installed)" ]]
   [[ ${lines[1]} == "new-gh 2.0-1 (up to date)" ]]
   [[ ${lines[2]} == "old-gh 1.0-1 -> 1.1" ]]
-  [[ ${lines[3]} == "ghpkg: 1 packages can be updated. 1/3 packages up-to-date. 1 not installed." ]]
+  [[ ${lines[3]} == "ghpkg: 1 package can be updated. 1/3 packages up-to-date. 1 not installed." ]]
   [[ ${lines[4]} == 'run `ghpkg update`' ]]
 }
 
@@ -38,8 +38,8 @@ setup() { setup_ghpkg; }
   installed app-gh 1.0-1
   serve_release me/app v1.1
   run ghpkg check-update
-  [[ ${lines[0]} == "app-gh 1.0-1 -> 1.1-1 (built but not installed yet)" ]]
-  [[ ${lines[1]} == "ghpkg: 1 packages can be updated. 0/1 packages up-to-date." ]]
+  [[ ${lines[0]} == "app-gh 1.0-1 -> 1.1-1 (the PKGBUILD is newer than the installed package)" ]]
+  [[ ${lines[1]} == "ghpkg: 1 package can be updated. 0/1 packages up-to-date." ]]
 }
 
 @test "a package GitHub can't answer for is reported, and the exit code is 1" {

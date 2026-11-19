@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Installs new GitHub releases of the packages in ~/.config/pkgbuilds at the
-# end of every `omarchy update`. pacman still asks before changing anything.
+# Installs new GitHub releases of your ghpkg packages at the end of every
+# `omarchy update`. pacman still asks before changing anything.
 # Installed with `ghpkg hook install --update`; `ghpkg hook install` swaps it
 # for the report-only hook.
 

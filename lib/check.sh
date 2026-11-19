@@ -14,13 +14,13 @@ check_update() {
 
     case $STATE in
       release) echo "$pkg ${INSTALLED:-$CURRENT} -> $LATEST"; updatable=$((updatable + 1)) ;;
-      install) echo "$pkg $INSTALLED -> $CURRENT (built but not installed yet)"; updatable=$((updatable + 1)) ;;
+      install) echo "$pkg $INSTALLED -> $CURRENT (the PKGBUILD is newer than the installed package)"; updatable=$((updatable + 1)) ;;
       missing) echo "$pkg $CURRENT (not installed)"; missing=$((missing + 1)) ;;
       ok) echo "$pkg $CURRENT (up to date)"; current=$((current + 1)) ;;
     esac
   done
 
-  summary="ghpkg: $updatable packages can be updated. $current/$total packages up-to-date."
+  summary="ghpkg: $updatable $( (( updatable == 1 )) && echo package || echo packages) can be updated. $current/$total packages up-to-date."
   (( missing == 0 )) || summary+=" $missing not installed."
   (( failed == 0 )) || summary+=" $failed couldn't be checked."
   echo "$summary"

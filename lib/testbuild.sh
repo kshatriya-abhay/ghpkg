@@ -69,6 +69,14 @@ test_build() {
   local pkg=$1 dir log status=0 built original src missing
   has_pkg "$pkg" || die "no PKGBUILD for $pkg in $GHPKG_ROOT"
 
+  # ghpkg update rewrites the checksums by replacing the sha256sums= line,
+  # so the whole array has to be on that line.
+  if grep -q '^sha256sums=' "$GHPKG_ROOT/$pkg/PKGBUILD" &&
+    ! grep -qE '^sha256sums=\(.*\)[[:space:]]*(#.*)?$' "$GHPKG_ROOT/$pkg/PKGBUILD"; then
+    echo "sha256sums=(…) has to be on one line: ghpkg update replaces that line, and would break a longer array."
+    return 1
+  fi
+
   dir=$GHPKG_CACHE/test-build/$pkg
   rm -rf "$dir"
   mkdir -p "$dir/build" "$dir/packages" "$GHPKG_CACHE/sources"

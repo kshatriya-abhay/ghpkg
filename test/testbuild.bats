@@ -176,3 +176,23 @@ EOF
   [[ $output == *"FAILED"* ]]
   [[ $output == *"The build failed. The end of makepkg's log"* ]]
 }
+
+@test "test-build refuses sha256sums spread over several lines" {
+  zst_pkgbuild
+  sed -i "s/^sha256sums=('\(.*\)')$/sha256sums=(\n  '\1'\n)/" "$GHPKG_ROOT/myapp-gh/PKGBUILD"
+  grep -qx 'sha256sums=(' "$GHPKG_ROOT/myapp-gh/PKGBUILD"
+
+  run ghpkg test-build myapp-gh
+  [[ $status -eq 1 ]]
+  [[ $output == *"sha256sums=(…) has to be on one line"* ]]
+  [[ ! -d $GHPKG_CACHE/test-build/myapp-gh ]]
+}
+
+@test "test-build accepts sha256sums on one line, with a comment after it" {
+  zst_pkgbuild
+  sed -i "s/^\(sha256sums=(.*)\)$/\1  # from GitHub/" "$GHPKG_ROOT/myapp-gh/PKGBUILD"
+
+  run ghpkg test-build myapp-gh
+  [[ $status -eq 0 ]]
+  [[ $output != *"has to be on one line"* ]]
+}
