@@ -12,14 +12,21 @@ all_pkgs() {
   done
 }
 
-has_pkg() { [[ -f $GHPKG_ROOT/$1/PKGBUILD ]]; }
+# Package names as pacman allows them. Checked wherever a name from the
+# command line becomes a path, so "../x" can't reach outside $GHPKG_ROOT.
+valid_pkgname() { [[ $1 =~ ^[a-z0-9@_+][a-z0-9@._+-]*$ ]]; }
+
+has_pkg() { valid_pkgname "$1" && [[ -f $GHPKG_ROOT/$1/PKGBUILD ]]; }
 
 # A PKGBUILD variable or array, one item per line, read the way makepkg reads it.
-pkgvar() {
+pkgvar() { pkgfile_var "$GHPKG_ROOT/$1/PKGBUILD" "$2"; }
+
+# The same, from a PKGBUILD file at any path.
+pkgfile_var() {
   (
     set +eu
     # shellcheck disable=SC1090,SC1091
-    source "$GHPKG_ROOT/$1/PKGBUILD"
+    source "$1"
     eval "printf '%s\n' \"\${$2[@]}\""
   )
 }

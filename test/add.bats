@@ -38,6 +38,9 @@ pkgbuild() { cat "$GHPKG_ROOT/myapp-gh/PKGBUILD"; }
   [[ $status -eq 0 ]]
   [[ $output == *"Files: the same 3 files as myapp-1.0-1-x86_64.pkg.tar.zst."* ]]
   [[ $output == *"Install it when you're ready with: ghpkg update myapp-gh"* ]]
+  # The runtime-libraries warning becomes the note in step 4, and isn't repeated.
+  [[ $output == *"Note: some programs link only to the basic C libraries"* ]]
+  [[ ${output#*5/7} != *"These programs link only"* ]]
 
   run pkgbuild
   [[ $output == *"pkgname=myapp-gh"* ]]

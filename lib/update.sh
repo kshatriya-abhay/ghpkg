@@ -9,11 +9,15 @@ use_build_dirs() {
 }
 
 # Points the PKGBUILD at LATEST and fills in its checksums: GitHub's when the
-# release lists them, otherwise the hash of the download.
+# release lists them, otherwise the hash of the download. The new PKGBUILD is
+# written next to the old one and moved into place only when it's complete: a
+# new pkgver with the old checksums would never build, and the next update
+# wouldn't fix it, because the PKGBUILD would already be at LATEST.
 bump() {
-  local pkg=$1 file=$GHPKG_ROOT/$1/PKGBUILD src digest sums=() unverified=false
+  local pkg=$1 dir=$GHPKG_ROOT/$1 new src digest sums=() unverified=false
+  new=$dir/.PKGBUILD.ghpkg-new
 
-  sed -i -e "s/^pkgver=.*/pkgver=$LATEST/" -e "s/^pkgrel=.*/pkgrel=1/" "$file"
+  sed -e "s/^pkgver=.*/pkgver=$LATEST/" -e "s/^pkgrel=.*/pkgrel=1/" "$dir/PKGBUILD" >"$new"
 
   while IFS= read -r src; do
     digest=$(asset_digest "$(source_url "$src")")
@@ -22,14 +26,19 @@ bump() {
     else
       unverified=true
     fi
-  done < <(pkgvar "$pkg" source)
+  done < <(pkgfile_var "$new" source)
 
   if $unverified; then
     warn "$pkg: GitHub lists no checksum for this release, so it can't be verified. Using the hash of the download."
-    (cd "$GHPKG_ROOT/$pkg" && updpkgsums)
+    if ! (cd "$dir" && updpkgsums "${new##*/}"); then
+      rm -f "$new"
+      warn "$pkg: couldn't hash the download, so the PKGBUILD is unchanged."
+      return 1
+    fi
   else
-    sed -i "s/^sha256sums=.*/sha256sums=(${sums[*]})/" "$file"
+    sed -i "s/^sha256sums=.*/sha256sums=(${sums[*]})/" "$new"
   fi
+  mv "$new" "$dir/PKGBUILD"
 }
 
 # Builds and installs, then drops the downloads. PKGDEST keeps the new package

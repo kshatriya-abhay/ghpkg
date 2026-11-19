@@ -1,5 +1,7 @@
 #!/bin/bash
 # Test stand-in for updpkgsums: writes a recognisable checksum and logs the call.
 set -euo pipefail
-echo "updpkgsums $PWD" >>"$GHPKG_TEST_LOG/updpkgsums"
-sed -i "s/^sha256sums=.*/sha256sums=('hash-of-the-download')/" PKGBUILD
+# GHPKG_TEST_UPDPKGSUMS=fail makes it fail the way a lost download does.
+echo "updpkgsums $PWD ${1:-PKGBUILD}" >>"$GHPKG_TEST_LOG/updpkgsums"
+[[ ${GHPKG_TEST_UPDPKGSUMS:-} != fail ]] || { echo "==> ERROR: Failure while downloading" >&2; exit 1; }
+sed -i "s/^sha256sums=.*/sha256sums=('hash-of-the-download')/" "${1:-PKGBUILD}"

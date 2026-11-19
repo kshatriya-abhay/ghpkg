@@ -62,7 +62,8 @@ describe_json_of() { describe "$@" --json; }
   [[ $(jq -c '[.scripts[].name]' <<<"$json") == '["postinst"]' ]]
   [[ $(jq -c '.files.setuid' <<<"$json") == '["opt/App Name/chrome-sandbox"]' ]]
 
-  warnings=$(jq -r '.warnings[]' <<<"$json")
+  warnings=$(jq -r '.warnings[].text' <<<"$json")
+  [[ $(jq -r '[.warnings[].code] | sort | join(" ")' <<<"$json") == "debian_docs debian_names icon_folders opt_without_bin root_scripts runtime_libraries setuid" ]]
   [[ $warnings == *"Debian package names"* ]]
   [[ $warnings == *"Programs are in /opt"* ]]
   [[ $warnings == *"setuid"*"opt/App Name/chrome-sandbox"* ]]
@@ -92,7 +93,8 @@ describe_json_of() { describe "$@" --json; }
   run describe_json_of me/myapp myapp-1.0-1-x86_64.pkg.tar.zst
   [[ $status -eq 0 ]]
   [[ $(jq -r .file.verified <<<"$output") == false ]]
-  [[ $(jq -r '.warnings[0]' <<<"$output") == *"can't be verified"* ]]
+  [[ $(jq -r '.warnings[0].text' <<<"$output") == *"can't be verified"* ]]
+  jq -e 'any(.warnings[]; .code == "unverified")' <<<"$output" >/dev/null
 }
 
 @test "a good copy in the cache isn't downloaded again" {
@@ -169,7 +171,8 @@ describe_json_of() { describe "$@" --json; }
   run describe_json_of me/myapp myapp-1.0-1-x86_64.pkg.tar.zst
   [[ $(jq -c '.foreign_names' <<<"$output") == '[{"name":"myapp","where":"AUR","url":"https://github.com/someone/else"}]' ]]
   [[ $(jq -c '.aur_same_app' <<<"$output") == '[]' ]]
-  [[ $(jq -r '.warnings[]' <<<"$output") == *"These names belong to other apps: myapp (AUR, https://github.com/someone/else)"* ]]
+  [[ $(jq -r '.warnings[].text' <<<"$output") == *"These names belong to other apps: myapp (AUR, https://github.com/someone/else)"* ]]
+  jq -e 'any(.warnings[]; .code == "foreign_names")' <<<"$output" >/dev/null
 }
 
 @test "the runtime-libraries warning names each program that links only to libc, even next to others" {
@@ -180,7 +183,8 @@ describe_json_of() { describe "$@" --json; }
   (cd "$dir" && bsdtar --zstd -cf "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst" .PKGINFO usr)
   publish me/myapp v1.0 "$BATS_TEST_TMPDIR/myapp-1.0-1-x86_64.pkg.tar.zst"
   run describe_json_of me/myapp myapp-1.0-1-x86_64.pkg.tar.zst
-  [[ $(jq -r '.warnings[]' <<<"$output") == *"These programs link only to the basic C libraries: /usr/bin/myapp. "* ]]
+  [[ $(jq -r '.warnings[].text' <<<"$output") == *"These programs link only to the basic C libraries: /usr/bin/myapp. "* ]]
+  jq -e 'any(.warnings[]; .code == "runtime_libraries")' <<<"$output" >/dev/null
 }
 
 @test "dependencies missing from the official repos are flagged, saying whether the AUR has them" {
@@ -192,7 +196,8 @@ describe_json_of() { describe "$@" --json; }
 
   run describe_json_of me/myapp myapp-1.0-1-x86_64.pkg.tar.zst
   [[ $(jq -c '.unavailable_depends' <<<"$output") == '[{"name":"gtk3","aur":true}]' ]]
-  [[ $(jq -r '.warnings[]' <<<"$output") == *"aren't in the official repos: gtk3 (on the AUR only)"* ]]
+  [[ $(jq -r '.warnings[].text' <<<"$output") == *"aren't in the official repos: gtk3 (on the AUR only)"* ]]
+  jq -e 'any(.warnings[]; .code == "unavailable_depends")' <<<"$output" >/dev/null
 }
 
 @test "an installed dependency isn't flagged, even when the repos no longer have it" {

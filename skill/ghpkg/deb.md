@@ -13,7 +13,7 @@ scripts, and fixing the layout.
 - `metadata.licenses` is empty: a `.deb`'s control file has no licence field. Look at `usr/share/doc/<name>/copyright` in the package, or the GitHub repo's licence (`ghpkg inspect` shows it).
 - `metadata.depends` and `metadata.optdepends` are **Debian names**. Translate each one; see `dependencies.md`.
 - `scripts`: `preinst`, `postinst`, `prerm`, `postrm`, if any.
-- `warnings`: what needs a layout fix.
+- `warnings`: what needs a decision or a layout fix. Each is `{code, text}`: show the user the `text`, and go by the `code` (such as `opt_without_bin` or `setuid`), which stays the same when the wording changes.
 
 ## The PKGBUILD
 

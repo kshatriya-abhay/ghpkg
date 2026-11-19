@@ -110,8 +110,6 @@ suggest_name() {
   echo "${base,,}-gh"
 }
 
-valid_pkgname() { [[ $1 =~ ^[a-z0-9@_+][a-z0-9@._+-]*$ ]]; }
-
 add() {
   local arg='' file='' name=''
   while (( $# )); do
@@ -267,7 +265,7 @@ add() {
     echo "$line"
   done <<<"$proposed"
   [[ -n $proposed ]] || echo "  (none)"
-  if jq -e '.warnings[] | select(contains("basic C libraries"))' <<<"$desc" >/dev/null; then
+  if jq -e 'any(.warnings[]; .code == "runtime_libraries")' <<<"$desc" >/dev/null; then
     echo
     echo "  Note: some programs link only to the basic C libraries, so they probably load"
     echo "  more at runtime (display, GL, sound, D-Bus) that no list here can show."
@@ -309,7 +307,8 @@ add() {
     esac
   fi
   local other_warnings
-  other_warnings=$(jq -r '.warnings[] | select((contains("basic C libraries") or contains("run as root")) | not)' <<<"$desc")
+  # Those two were handled in steps 4 and 5.
+  other_warnings=$(jq -r '.warnings[] | select(.code != "runtime_libraries" and .code != "root_scripts") | .text' <<<"$desc")
   if [[ -n $other_warnings ]]; then
     echo
     echo "Also:"

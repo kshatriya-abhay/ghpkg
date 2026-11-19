@@ -26,6 +26,26 @@ pkgbuild() { cat "$GHPKG_ROOT/$1/PKGBUILD"; }
   [[ $output == *"Updated: app-gh"* ]]
 }
 
+@test "a failed hash leaves the PKGBUILD unchanged, so the next update works" {
+  make_pkgbuild app-gh me/app 1.0
+  installed app-gh 1.0-1
+  serve_release me/app v1.1 app-gh-1.1.pkg.tar.zst -
+  cp "$GHPKG_ROOT/app-gh/PKGBUILD" "$BATS_TEST_TMPDIR/before"
+
+  GHPKG_TEST_UPDPKGSUMS=fail run ghpkg update
+  [[ $status -eq 1 ]]
+  [[ $output == *"couldn't hash the download, so the PKGBUILD is unchanged"* ]]
+  cmp "$GHPKG_ROOT/app-gh/PKGBUILD" "$BATS_TEST_TMPDIR/before"
+  [[ ! -e $GHPKG_ROOT/app-gh/.PKGBUILD.ghpkg-new ]]
+  [[ ! -s $GHPKG_TEST_LOG/makepkg ]]
+
+  run ghpkg update
+  [[ $status -eq 0 ]]
+  grep -qx 'pkgver=1.1' "$GHPKG_ROOT/app-gh/PKGBUILD"
+  grep -qx "sha256sums=('hash-of-the-download')" "$GHPKG_ROOT/app-gh/PKGBUILD"
+  grep -qx 'app-gh 1.1-1' "$GHPKG_TEST_DB/installed"
+}
+
 @test "with no checksum from GitHub it hashes the download and warns" {
   make_pkgbuild app-gh me/app 1.0
   installed app-gh 1.0-1
@@ -178,4 +198,20 @@ pkgbuild() { cat "$GHPKG_ROOT/$1/PKGBUILD"; }
   [[ $status -eq 1 ]]
   [[ $output == *"no terminal to ask in"* ]]
   grep -q '^app-gh ' "$GHPKG_TEST_DB/installed"
+}
+
+@test "a name that leads outside the packages folder is refused" {
+  mkdir -p "$GHPKG_ROOT/../outside"
+  echo 'pkgname=outside' >"$GHPKG_ROOT/../outside/PKGBUILD"
+
+  run ghpkg remove ../outside <<<y
+  [[ $status -eq 1 ]]
+  [[ -f $GHPKG_ROOT/../outside/PKGBUILD ]]
+
+  run ghpkg update ../outside
+  [[ $status -eq 1 ]]
+  [[ ! -s $GHPKG_TEST_LOG/makepkg ]]
+
+  run ghpkg test-build ../outside
+  [[ $status -eq 1 ]]
 }

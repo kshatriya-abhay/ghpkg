@@ -187,6 +187,10 @@ odd_icon_dirs() {
     done
 }
 
+# Adds a warning to describe_json's list: a code that callers branch on, and
+# the text a person reads. The text can change; the code can't.
+add_warning() { warnings+=("$(jq -cn --arg code "$1" --arg text "$2" '{code: $code, text: $text}')"); }
+
 describe_json() {
   local repo=$1 name=$2 kind work files meta scripts setuid warnings=() libs
   fetch_release "$repo" || die "$repo: $GH_ERROR"
@@ -221,15 +225,15 @@ describe_json() {
   libs=$(libraries_json "$work/root")
 
   # Things that need a person's decision.
-  $FILE_VERIFIED || warnings+=("GitHub lists no checksum for $name, so the download can't be verified. Its sha256 is $FILE_SHA256.")
-  [[ $kind == deb ]] && warnings+=("Dependencies are Debian package names. Each needs translating to its Arch name.")
+  $FILE_VERIFIED || add_warning unverified "GitHub lists no checksum for $name, so the download can't be verified. Its sha256 is $FILE_SHA256."
+  [[ $kind == deb ]] && add_warning debian_names "Dependencies are Debian package names. Each needs translating to its Arch name."
   if [[ $(jq length <<<"$foreign") -gt 0 ]]; then
-    warnings+=("These names belong to other apps: $(jq -r 'map("\(.name) (\(.where)" + (if .url then ", \(.url)" else "" end) + ")") | join(", ")' <<<"$foreign"). Leave them out of provides= and conflicts=: pacman would uninstall that app when installing yours.")
+    add_warning foreign_names "These names belong to other apps: $(jq -r 'map("\(.name) (\(.where)" + (if .url then ", \(.url)" else "" end) + ")") | join(", ")' <<<"$foreign"). Leave them out of provides= and conflicts=: pacman would uninstall that app when installing yours."
   fi
   if [[ $(jq length <<<"$unavailable") -gt 0 ]]; then
-    warnings+=("Upstream lists dependencies that aren't in the official repos: $(jq -r 'map(.name + (if .aur == true then " (on the AUR only)" elif .aur == false then " (not on the AUR either)" else "" end)) | join(", ")' <<<"$unavailable"). pacman can't install them as they are: find what replaced each one (for example the package that owns the library the program links to), make an AUR-only one optional, or leave it out.")
+    add_warning unavailable_depends "Upstream lists dependencies that aren't in the official repos: $(jq -r 'map(.name + (if .aur == true then " (on the AUR only)" elif .aur == false then " (not on the AUR either)" else "" end)) | join(", ")' <<<"$unavailable"). pacman can't install them as they are: find what replaced each one (for example the package that owns the library the program links to), make an AUR-only one optional, or leave it out."
   fi
-  [[ $(jq length <<<"$scripts") -gt 0 ]] && warnings+=("Has scripts that run as root when installing or removing: $(jq -r 'map(.name) | join(", ")' <<<"$scripts"). Read them before carrying them over.")
+  [[ $(jq length <<<"$scripts") -gt 0 ]] && add_warning root_scripts "Has scripts that run as root when installing or removing: $(jq -r 'map(.name) | join(", ")' <<<"$scripts"). Read them before carrying them over."
   # Programs that link only to the basic C libraries, each judged on its own:
   # one such GUI next to a daemon that links plenty still loads its display
   # libraries at runtime.
@@ -240,22 +244,22 @@ describe_json() {
     | select(all(.needed[]; . as $l | ($basic | contains(" " + $l + " ")) or ($bundled | index($l) != null)))
     | .path' <<<"$libs")
   if [[ -n $bare ]]; then
-    warnings+=("These programs link only to the basic C libraries: $(paste -sd' ' <<<"$bare"). Programs like this usually load display, GL, sound or D-Bus libraries at runtime, so the dependency list may be incomplete: compare it with the AUR's PKGBUILD or upstream's docs, and look for library names inside the program (strings | grep '\.so').")
+    add_warning runtime_libraries "These programs link only to the basic C libraries: $(paste -sd' ' <<<"$bare"). Programs like this usually load display, GL, sound or D-Bus libraries at runtime, so the dependency list may be incomplete: compare it with the AUR's PKGBUILD or upstream's docs, and look for library names inside the program (strings | grep '\.so')."
   fi
-  [[ $(jq '.unresolved | length' <<<"$libs") -gt 0 ]] && warnings+=("Libraries not on this system: $(jq -r '.unresolved | join(", ")' <<<"$libs"). Find their Arch packages with 'pacman -F <library>'.")
+  [[ $(jq '.unresolved | length' <<<"$libs") -gt 0 ]] && add_warning unresolved_libraries "Libraries not on this system: $(jq -r '.unresolved | join(", ")' <<<"$libs"). Find their Arch packages with 'pacman -F <library>'."
   if grep -q '^opt/' <<<"$files" && ! grep -qE '^usr/bin/' <<<"$files"; then
-    warnings+=("Programs are in /opt, with nothing in /usr/bin. The PKGBUILD should link the main program into /usr/bin.")
+    add_warning opt_without_bin "Programs are in /opt, with nothing in /usr/bin. The PKGBUILD should link the main program into /usr/bin."
   fi
   local odd
   odd=$(odd_icon_dirs <<<"$files")
-  [[ -n $odd ]] && warnings+=("Icon folders the hicolor theme doesn't know, so icons there won't show: $(paste -sd' ' <<<"$odd").")
-  [[ -n $setuid ]] && warnings+=("Files with the setuid bit (they run as their owner, usually root): $(paste -sd' ' <<<"$setuid").")
+  [[ -n $odd ]] && add_warning icon_folders "Icon folders the hicolor theme doesn't know, so icons there won't show: $(paste -sd' ' <<<"$odd")."
+  [[ -n $setuid ]] && add_warning setuid "Files with the setuid bit (they run as their owner, usually root): $(paste -sd' ' <<<"$setuid")."
   if [[ $kind == deb ]]; then
-    grep -q '^etc/apt/' <<<"$files" && warnings+=("Adds an apt repository under /etc/apt. Delete it in package().")
-    grep -qE '^usr/share/(lintian|menu)/' <<<"$files" && warnings+=("Has Debian-only files in /usr/share/lintian or /usr/share/menu. Delete them in package().")
-    grep -q '^usr/share/doc/' <<<"$files" && warnings+=("Has /usr/share/doc (Debian changelogs and copyright). Keeping it is optional.")
+    grep -q '^etc/apt/' <<<"$files" && add_warning apt_repository "Adds an apt repository under /etc/apt. Delete it in package()."
+    grep -qE '^usr/share/(lintian|menu)/' <<<"$files" && add_warning debian_only_files "Has Debian-only files in /usr/share/lintian or /usr/share/menu. Delete them in package()."
+    grep -q '^usr/share/doc/' <<<"$files" && add_warning debian_docs "Has /usr/share/doc (Debian changelogs and copyright). Keeping it is optional."
   fi
-  grep -qvE '^(usr|opt)/' <<<"$files" && warnings+=("Has files outside /usr and /opt: $(grep -vE '^(usr|opt)/' <<<"$files" | head -5 | paste -sd' ').")
+  grep -qvE '^(usr|opt)/' <<<"$files" && add_warning outside_usr "Has files outside /usr and /opt: $(grep -vE '^(usr|opt)/' <<<"$files" | head -5 | paste -sd' ')."
 
   jq -n \
     --arg repo "$repo" --arg tag "$(jq -r .tag_name <<<"$RELEASE")" \
@@ -267,7 +271,7 @@ describe_json() {
     --argjson files "$(lines_json <<<"$files" | jq 'map(select(length > 0))')" \
     --argjson setuid "$(lines_json <<<"$setuid" | jq 'map(select(length > 0))')" \
     --argjson libs "$libs" \
-    --argjson warnings "$(printf '%s\n' "${warnings[@]}" | lines_json | jq 'map(select(length > 0))')" \
+    --argjson warnings "$(printf '%s\n' "${warnings[@]}" | jq -s .)" \
     '{repo: $repo, tag: $tag,
       file: {name: $name, kind: $kind, url: $url, path: $path, sha256: $sha256, verified: $verified},
       metadata: $meta, scripts: $scripts, called_scripts: $called,
@@ -349,6 +353,6 @@ print_description() {
        (if .bundled then "bundled in the package" elif .owner then "from \(.owner)" else "NOT ON THIS SYSTEM" end))
      end),
     (if (.warnings | length) == 0 then "", "Nothing needs a decision."
-     else "", "Needs a decision:", (.warnings[] | "  - \(.)") end)
+     else "", "Needs a decision:", (.warnings[] | "  - \(.text)") end)
   '
 }
